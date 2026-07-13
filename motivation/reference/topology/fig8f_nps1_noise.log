@@ -1,0 +1,61 @@
+NUMA Available. Max Node ID: 1, Configured Nodes: 2
+--- Configuration ---
+Threads: 12
+Mode: Bandwidth
+Running in bandwidth mode
+Worker Mem Size (per thread): 256 MB
+Worker NUMA Policy: bind
+Assignments (Thread | Core | NUMA | Rate | Mode):
+  0 | 4 | 0 | 220 | 0
+  1 | 5 | 0 | 220 | 0
+  2 | 6 | 0 | 220 | 0
+  3 | 11 | 0 | 220 | 0
+  4 | 12 | 0 | 220 | 0
+  5 | 13 | 0 | 220 | 0
+  6 | 18 | 0 | 220 | 0
+  7 | 19 | 0 | 220 | 0
+  8 | 20 | 0 | 220 | 0
+  9 | 25 | 0 | 220 | 0
+  10 | 26 | 0 | 220 | 0
+  11 | 27 | 0 | 220 | 0
+---------------------
+Sticking to core 4
+Worker thread Sticking to core 5
+0 started. Core: 4, NUMA Node: 0, Rate: 220
+Worker thread 1 started. Core: 5, Sticking to core NUMA Node: 06, Rate: 
+220
+Sticking to core 11
+Worker thread 2 started. Core: 6, NUMA Node: 0, Rate: 220Sticking to core Sticking to core 13
+Worker thread 
+312
+ started. Core: 11, NUMA Node: 0, Rate: 220Worker thread 5 started. Core: 13, NUMA Node: 0, Rate: 
+Worker thread 4 started. Core: 12, 220
+NUMA Node: 0, Rate: 220
+Sticking to core 18
+Worker thread 6 started. Core: 18, NUMA Node: 0, Rate: 220
+Sticking to core 19
+Worker thread 7 started. Core: 19, NUMA Node: 0, Rate: 220
+Sticking to core 20
+Worker thread 8 started. Core: 20, NUMA Node: 0, Rate: 220
+Sticking to core 25
+Worker thread Sticking to core 26
+Sticking to core 27
+9 started. Core: 25, NUMA Node: 0, Rate: 220
+Worker thread 11 started. Core: 27, NUMA Node: 0, Rate: 220
+Worker thread 10 started. Core: 26, NUMA Node: 0, Rate: 220
+Running bandwidth measurement for 3 seconds...
+Time limit reached. Signalling threads to stop.
+Waiting for threads to join...
+fin: Worker 4 149395 (Core 12 -> NUMA 0): Traffic 14592.00 MB generated in 3.00 seconds. Bandwidth: 4859.28 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 2 149393 (Core 6 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4852.04 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 7 149398 (Core 19 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4850.93 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 6 149397 (Core 18 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4849.85 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 1 149392 (Core 5 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4848.59 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 9 149400 (Core 25 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4848.11 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 0 149391 (Core 4 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4847.31 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 11 149402 (Core 27 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4845.94 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 3 149394 (Core 11 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4844.98 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 8 149399 (Core 20 -> NUMA 0): Traffic 14592.00 MB generated in 3.01 seconds. Bandwidth: 4843.05 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 10 149401 (Core 26 -> NUMA 0): Traffic 14592.00 MB generated in 3.02 seconds. Bandwidth: 4836.40 MB/s lat : 1.65 ns (Rate: 220)
+fin: Worker 5 149396 (Core 13 -> NUMA 0): Traffic 14592.00 MB generated in 3.02 seconds. Bandwidth: 4824.70 MB/s lat : 1.66 ns (Rate: 220)
+Benchmark finished.

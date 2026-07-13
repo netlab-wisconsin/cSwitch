@@ -1,0 +1,10 @@
+# 4x3 matrix heatmap data.
+# Row order (top to bottom in the plot): Domain 0, Domain 1, Domain 2, Domain 3
+# Column order: EEVDF, Affine, Optimal
+#
+# Values can be either 0-1 fractions or 0-100 percentages.
+# Example:
+35.2	25.0	100.0
+14.3	25.0	0.0
+17.2	25.0	0.0
+33.3	25.0	0.0

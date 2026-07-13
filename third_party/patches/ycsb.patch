@@ -1,0 +1,331 @@
+diff --git a/elasticsearch/src/main/java/site/ycsb/db/ElasticsearchClient.java b/elasticsearch/src/main/java/site/ycsb/db/ElasticsearchClient.java
+index 30ed2191..7e2fa031 100644
+--- a/elasticsearch/src/main/java/site/ycsb/db/ElasticsearchClient.java
++++ b/elasticsearch/src/main/java/site/ycsb/db/ElasticsearchClient.java
+@@ -72,10 +72,17 @@ public class ElasticsearchClient extends DB {
+   private static final String DEFAULT_REMOTE_HOST = "localhost:9300";
+   private static final int NUMBER_OF_SHARDS = 1;
+   private static final int NUMBER_OF_REPLICAS = 0;
++  private static final Object SHARED_CLIENT_LOCK = new Object();
++  private static Node sharedNode;
++  private static Client sharedClient;
++  private static boolean sharedRemoteMode;
++  private static String sharedConfigKey;
++  private static int sharedClientRefCount;
+   private Node node;
+   private Client client;
+   private String indexKey;
+-  private Boolean remoteMode;
++  private boolean remoteMode;
++  private boolean clientRefHeld;
+ 
+   /**
+    * Initialize any state for this DB. Called once per DB instance; there is one
+@@ -101,83 +108,158 @@ public class ElasticsearchClient extends DB {
+     int numberOfShards = parseIntegerProperty(props, "es.number_of_shards", NUMBER_OF_SHARDS);
+     int numberOfReplicas = parseIntegerProperty(props, "es.number_of_replicas", NUMBER_OF_REPLICAS);
+ 
+-    Boolean newdb = Boolean.parseBoolean(props.getProperty("es.newdb", "false"));
+-    Builder settings = Settings.settingsBuilder()
++    final boolean newdb = Boolean.parseBoolean(props.getProperty("es.newdb", "false"));
++    final Builder settingsBuilder = Settings.settingsBuilder()
+         .put("cluster.name", DEFAULT_CLUSTER_NAME)
+         .put("node.local", Boolean.toString(!remoteMode))
+         .put("path.home", pathHome);
+ 
+     // if properties file contains elasticsearch user defined properties
+     // add it to the settings file (will overwrite the defaults).
+-    settings.put(props);
++    settingsBuilder.put(props);
++    final Settings settings = settingsBuilder.build();
+     final String clusterName = settings.get("cluster.name");
++    final String configKey = buildSharedConfigKey(props, remoteMode, pathHome, clusterName,
++        indexKey, numberOfShards, numberOfReplicas);
+     System.err.println("Elasticsearch starting node = " + clusterName);
+     System.err.println("Elasticsearch node path.home = " + settings.get("path.home"));
+     System.err.println("Elasticsearch Remote Mode = " + remoteMode);
+-    // Remote mode support for connecting to remote elasticsearch cluster
+-    if (remoteMode) {
+-      settings.put("client.transport.sniff", true)
+-          .put("client.transport.ignore_cluster_name", false)
+-          .put("client.transport.ping_timeout", "30s")
+-          .put("client.transport.nodes_sampler_interval", "30s");
+-      // Default it to localhost:9300
+-      String[] nodeList = props.getProperty("es.hosts.list", DEFAULT_REMOTE_HOST).split(",");
+-      System.out.println("Elasticsearch Remote Hosts = " + props.getProperty("es.hosts.list", DEFAULT_REMOTE_HOST));
+-      TransportClient tClient = TransportClient.builder().settings(settings).build();
+-      for (String h : nodeList) {
+-        String[] nodes = h.split(":");
++    synchronized (SHARED_CLIENT_LOCK) {
++      if (sharedClient == null) {
++        Node createdNode = null;
++        Client createdClient = null;
+         try {
+-          tClient.addTransportAddress(new InetSocketTransportAddress(
+-              InetAddress.getByName(nodes[0]),
+-              Integer.parseInt(nodes[1])
+-              ));
+-        } catch (NumberFormatException e) {
+-          throw new IllegalArgumentException("Unable to parse port number.", e);
+-        } catch (UnknownHostException e) {
+-          throw new IllegalArgumentException("Unable to Identify host.", e);
++          // Remote mode support for connecting to remote elasticsearch cluster.
++          if (remoteMode) {
++            final Settings remoteSettings = Settings.settingsBuilder()
++                .put(settings)
++                .put("client.transport.sniff", true)
++                .put("client.transport.ignore_cluster_name", false)
++                .put("client.transport.ping_timeout", "30s")
++                .put("client.transport.nodes_sampler_interval", "30s")
++                .build();
++            // Default it to localhost:9300.
++            String[] nodeList = props.getProperty("es.hosts.list", DEFAULT_REMOTE_HOST).split(",");
++            System.out.println("Elasticsearch Remote Hosts = "
++                + props.getProperty("es.hosts.list", DEFAULT_REMOTE_HOST));
++            TransportClient tClient = TransportClient.builder().settings(remoteSettings).build();
++            for (String h : nodeList) {
++              String[] nodes = h.split(":");
++              try {
++                tClient.addTransportAddress(new InetSocketTransportAddress(
++                    InetAddress.getByName(nodes[0]),
++                    Integer.parseInt(nodes[1])
++                ));
++              } catch (NumberFormatException e) {
++                throw new IllegalArgumentException("Unable to parse port number.", e);
++              } catch (UnknownHostException e) {
++                throw new IllegalArgumentException("Unable to Identify host.", e);
++              }
++            }
++            createdClient = tClient;
++          } else {
++            createdNode = nodeBuilder().clusterName(clusterName).settings(settings).node();
++            createdNode.start();
++            createdClient = createdNode.client();
++          }
++
++          prepareIndex(createdClient, indexKey, newdb, numberOfShards, numberOfReplicas);
++          sharedNode = createdNode;
++          sharedClient = createdClient;
++          sharedRemoteMode = remoteMode;
++          sharedConfigKey = configKey;
++        } catch (Exception e) {
++          closeResources(createdClient, createdNode, remoteMode);
++          throw new DBException("Unable to initialize Elasticsearch client", e);
+         }
++      } else if (!configKey.equals(sharedConfigKey)) {
++        throw new DBException("Embedded Elasticsearch client already initialized with a different configuration");
+       }
+-      client = tClient;
+-    } else { // Start node only if transport client mode is disabled
+-      node = nodeBuilder().clusterName(clusterName).settings(settings).node();
+-      node.start();
+-      client = node.client();
++
++      node = sharedNode;
++      client = sharedClient;
++      this.remoteMode = sharedRemoteMode;
++      sharedClientRefCount++;
++      clientRefHeld = true;
++    }
++  }
++
++  private int parseIntegerProperty(Properties properties, String key, int defaultValue) {
++    String value = properties.getProperty(key);
++    return value == null ? defaultValue : Integer.parseInt(value);
++  }
++
++  private String buildSharedConfigKey(Properties props, boolean isRemoteMode, String pathHome,
++      String clusterName, String targetIndexKey, int numberOfShards, int numberOfReplicas) {
++    StringBuilder keyBuilder = new StringBuilder();
++    keyBuilder.append("remote=").append(isRemoteMode)
++        .append("|cluster=").append(clusterName)
++        .append("|path.home=").append(pathHome)
++        .append("|index=").append(targetIndexKey)
++        .append("|shards=").append(numberOfShards)
++        .append("|replicas=").append(numberOfReplicas);
++    if (isRemoteMode) {
++      keyBuilder.append("|hosts=")
++          .append(props.getProperty("es.hosts.list", DEFAULT_REMOTE_HOST));
+     }
++    return keyBuilder.toString();
++  }
+ 
++  private void prepareIndex(Client esClient, String targetIndexKey, boolean newdb,
++      int numberOfShards, int numberOfReplicas) {
+     final boolean exists =
+-            client.admin().indices()
+-                    .exists(Requests.indicesExistsRequest(indexKey)).actionGet()
+-                    .isExists();
++        esClient.admin().indices()
++            .exists(Requests.indicesExistsRequest(targetIndexKey)).actionGet()
++            .isExists();
+     if (exists && newdb) {
+-      client.admin().indices().prepareDelete(indexKey).execute().actionGet();
++      esClient.admin().indices().prepareDelete(targetIndexKey).execute().actionGet();
+     }
+     if (!exists || newdb) {
+-      client.admin().indices().create(
+-              new CreateIndexRequest(indexKey)
+-                      .settings(
+-                              Settings.builder()
+-                                      .put("index.number_of_shards", numberOfShards)
+-                                      .put("index.number_of_replicas", numberOfReplicas)
+-                                      .put("index.mapping._id.indexed", true)
+-                      )).actionGet();
++      esClient.admin().indices().create(
++          new CreateIndexRequest(targetIndexKey)
++              .settings(
++                  Settings.builder()
++                      .put("index.number_of_shards", numberOfShards)
++                      .put("index.number_of_replicas", numberOfReplicas)
++                      .put("index.mapping._id.indexed", true)
++              )).actionGet();
+     }
+-    client.admin().cluster().health(new ClusterHealthRequest().waitForGreenStatus()).actionGet();
++    esClient.admin().cluster().health(new ClusterHealthRequest().waitForGreenStatus()).actionGet();
+   }
+ 
+-  private int parseIntegerProperty(Properties properties, String key, int defaultValue) {
+-    String value = properties.getProperty(key);
+-    return value == null ? defaultValue : Integer.parseInt(value);
++  private void closeResources(Client esClient, Node esNode, boolean isRemoteMode) {
++    if (esClient == null) {
++      return;
++    }
++    if (!isRemoteMode) {
++      try {
++        esClient.close();
++      } finally {
++        if (esNode != null && !esNode.isClosed()) {
++          esNode.close();
++        }
++      }
++    } else {
++      esClient.close();
++    }
+   }
+ 
+   @Override
+   public void cleanup() throws DBException {
+-    if (!remoteMode) {
+-      if (!node.isClosed()) {
+-        client.close();
+-        node.close();
++    synchronized (SHARED_CLIENT_LOCK) {
++      if (!clientRefHeld) {
++        return;
++      }
++
++      clientRefHeld = false;
++      sharedClientRefCount--;
++      if (sharedClientRefCount <= 0) {
++        closeResources(sharedClient, sharedNode, sharedRemoteMode);
++        sharedClient = null;
++        sharedNode = null;
++        sharedConfigKey = null;
++        sharedClientRefCount = 0;
+       }
+-    } else {
+-      client.close();
+     }
+   }
+ 
+diff --git a/rocksdb/src/main/java/site/ycsb/db/rocksdb/RocksDBClient.java b/rocksdb/src/main/java/site/ycsb/db/rocksdb/RocksDBClient.java
+index 51d9067b..9b179da2 100644
+--- a/rocksdb/src/main/java/site/ycsb/db/rocksdb/RocksDBClient.java
++++ b/rocksdb/src/main/java/site/ycsb/db/rocksdb/RocksDBClient.java
+@@ -44,6 +44,10 @@ public class RocksDBClient extends DB {
+ 
+   static final String PROPERTY_ROCKSDB_DIR = "rocksdb.dir";
+   static final String PROPERTY_ROCKSDB_OPTIONS_FILE = "rocksdb.optionsfile";
++  static final String PROPERTY_ROCKSDB_PARALLELISM = "rocksdb.parallelism";
++  static final String PROPERTY_ROCKSDB_MAX_BACKGROUND_JOBS = "rocksdb.maxbackgroundjobs";
++  static final String PROPERTY_ROCKSDB_MAX_BACKGROUND_COMPACTIONS = "rocksdb.maxbackgroundcompactions";
++  static final String PROPERTY_ROCKSDB_MAX_BACKGROUND_FLUSHES = "rocksdb.maxbackgroundflushes";
+   private static final String COLUMN_FAMILY_NAMES_FILENAME = "CF_NAMES";
+ 
+   private static final Logger LOGGER = LoggerFactory.getLogger(RocksDBClient.class);
+@@ -145,7 +149,17 @@ public class RocksDBClient extends DB {
+       cfDescriptors.add(cfDescriptor);
+     }
+ 
+-    final int rocksThreads = Runtime.getRuntime().availableProcessors() * 2;
++    final Properties props = getProperties();
++    final int rocksThreads = getIntProperty(
++        props,
++        PROPERTY_ROCKSDB_PARALLELISM,
++        Runtime.getRuntime().availableProcessors() * 2);
++    final Integer maxBackgroundJobs = getOptionalIntProperty(props, PROPERTY_ROCKSDB_MAX_BACKGROUND_JOBS);
++    final int maxBackgroundCompactions = getIntProperty(
++        props,
++        PROPERTY_ROCKSDB_MAX_BACKGROUND_COMPACTIONS,
++        rocksThreads);
++    final Integer maxBackgroundFlushes = getOptionalIntProperty(props, PROPERTY_ROCKSDB_MAX_BACKGROUND_FLUSHES);
+ 
+     if(cfDescriptors.isEmpty()) {
+       final Options options = new Options()
+@@ -153,8 +167,14 @@ public class RocksDBClient extends DB {
+           .setCreateIfMissing(true)
+           .setCreateMissingColumnFamilies(true)
+           .setIncreaseParallelism(rocksThreads)
+-          .setMaxBackgroundCompactions(rocksThreads)
++          .setMaxBackgroundCompactions(maxBackgroundCompactions)
+           .setInfoLogLevel(InfoLogLevel.INFO_LEVEL);
++      if (maxBackgroundJobs != null) {
++        options.setMaxBackgroundJobs(maxBackgroundJobs);
++      }
++      if (maxBackgroundFlushes != null) {
++        options.setMaxBackgroundFlushes(maxBackgroundFlushes);
++      }
+       dbOptions = options;
+       return RocksDB.open(options, rocksDbDir.toAbsolutePath().toString());
+     } else {
+@@ -162,8 +182,14 @@ public class RocksDBClient extends DB {
+           .setCreateIfMissing(true)
+           .setCreateMissingColumnFamilies(true)
+           .setIncreaseParallelism(rocksThreads)
+-          .setMaxBackgroundCompactions(rocksThreads)
++          .setMaxBackgroundCompactions(maxBackgroundCompactions)
+           .setInfoLogLevel(InfoLogLevel.INFO_LEVEL);
++      if (maxBackgroundJobs != null) {
++        options.setMaxBackgroundJobs(maxBackgroundJobs);
++      }
++      if (maxBackgroundFlushes != null) {
++        options.setMaxBackgroundFlushes(maxBackgroundFlushes);
++      }
+       dbOptions = options;
+ 
+       final List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
+@@ -175,6 +201,32 @@ public class RocksDBClient extends DB {
+     }
+   }
+ 
++  private int getIntProperty(final Properties props, final String key, final int defaultValue) {
++    if (props == null) {
++      return defaultValue;
++    }
++
++    final String value = props.getProperty(key);
++    if (value == null) {
++      return defaultValue;
++    }
++
++    return Integer.parseInt(value);
++  }
++
++  private Integer getOptionalIntProperty(final Properties props, final String key) {
++    if (props == null) {
++      return null;
++    }
++
++    final String value = props.getProperty(key);
++    if (value == null) {
++      return null;
++    }
++
++    return Integer.parseInt(value);
++  }
++
+   @Override
+   public void cleanup() throws DBException {
+     super.cleanup();

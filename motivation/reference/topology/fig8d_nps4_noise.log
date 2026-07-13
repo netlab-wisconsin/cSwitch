@@ -1,0 +1,31 @@
+NUMA Available. Max Node ID: 4, Configured Nodes: 3
+--- Configuration ---
+Threads: 4
+Mode: Bandwidth
+Running in bandwidth mode
+Worker Mem Size (per thread): 256 MB
+Worker NUMA Policy: bind
+Assignments (Thread | Core | NUMA | Rate | Mode):
+  0 | 0 | 1 | 0 | 0
+  1 | 1 | 1 | 0 | 0
+  2 | 2 | 1 | 0 | 0
+  3 | 3 | 1 | 0 | 0
+---------------------
+Sticking to core 0
+Sticking to core 1
+Worker thread 0 started. Core: Sticking to core 0, Worker thread 2
+NUMA Node: 1Sticking to core , Rate: 31
+ started. Core: 0Worker thread 2 started. Core: 2, NUMA Node: 1
+Worker thread 3, Rate: 0
+ started. Core: 3, NUMA Node: 1, Rate: 0
+1, NUMA Node: 1, Rate: 0
+Running bandwidth measurement for 3600 seconds...
+
+Received signal 15. Stopping benchmark and printing partial bandwidth results.
+fin: Worker 0 12196 (Core 0 -> NUMA 1): Traffic 41728.00 MB generated in 8.38 seconds. Bandwidth: 4980.27 MB/s lat : 1.61 ns (Rate: 0)
+fin: Worker 1 12197 (Core 1 -> NUMA 1): Traffic 41728.00 MB generated in 8.40 seconds. Bandwidth: 4970.10 MB/s lat : 1.61 ns (Rate: 0)
+fin: Worker 2 12198 (Core 2 -> NUMA 1): Traffic 41728.00 MB generated in 8.40 seconds. Bandwidth: 4968.14 MB/s lat : 1.61 ns (Rate: 0)
+fin: Worker 3 12199 (Core 3 -> NUMA 1): Traffic 41728.00 MB generated in 8.41 seconds. Bandwidth: 4963.15 MB/s lat : 1.61 ns (Rate: 0)
+Interrupt received. Waiting for threads to stop.
+Waiting for threads to join...
+Benchmark finished.

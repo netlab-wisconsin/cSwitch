@@ -1,0 +1,9 @@
+pair,payload_kib,bandwidth_runs,mean_bandwidth_gibs,stdev_bandwidth_gibs
+intra,64,3,23.828198,0.142355
+intra,128,3,25.454258,0.350959
+intra,256,3,26.033920,0.067908
+intra,512,3,25.833680,0.535672
+inter,64,3,9.368950,0.032509
+inter,128,3,9.433653,0.054032
+inter,256,3,9.541811,0.029551
+inter,512,3,9.517065,0.066532

@@ -1,0 +1,47 @@
+set term pdf size 6in, 4in font "Helvetica, 32"
+
+in1 = "data"
+out1 = "dimm-scaling-lat.pdf"
+
+#set xrange [0:32]
+#set yrange [0:1.2]
+
+set xlabel "Number of Cores" offset 0,0.7
+#set ylabel "10^6 Stall Cycles/Op" offset 0.7,0
+set ylabel "App. Lat.(ms)" offset 0,0
+
+set lmargin 7
+set rmargin 2
+
+set xtics offset 0,0.4
+set ytics offset 0
+
+# set format y "%.0s%c"
+#set format y "%.1e"
+
+set grid lw 5
+
+set key top left vertical samplen 1 box opaque 
+set key width 1
+set key height 0.3
+
+set yrange [0:900]
+set ytics 100
+
+set xrange [0:]
+
+set output out1
+
+set format y "%.0f"
+
+# Intel (Red 계열): 1번은 진한 빨강, 3번은 연한 분홍/빨강
+# AMD (Green/Blue 계열): 2번은 진한 색, 4번은 연한 색
+set style line 1 lc rgb "#6c009b" lw 7 pt 5  # 진한 빨강 (Intel ES)
+set style line 3 lc rgb "#d77aff" lw 7 pt 9  # 연한 빨강 (Intel ODB)
+set style line 2 lc rgb "#019d72" lw 7 pt 7  # 진한 파랑 (AMD ES)
+set style line 4 lc rgb "#5ed8a9" lw 7 pt 11  # 연한 파랑 (AMD ODB)
+
+plot in1 using 1:(column("latency-dimm1")/1000) with linespoints ls 1 ps 2 dt 1 title "1 DIMM", \
+     in1 using 1:(column("latency-dimm2")/1000) with linespoints ls 2  ps 2 dt 1 title "2 DIMMs", \
+     in1 using 1:(column("latency-dimm4")/1000) with linespoints ls 3  ps 2 dt 1 title "4 DIMMs", \
+     in1 using 1:(column("latency-dimm12")/1000) with linespoints ls 4  ps 2 dt 1 title "12 DIMMs", \

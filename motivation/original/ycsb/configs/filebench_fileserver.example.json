@@ -1,0 +1,37 @@
+{
+  "ycsb_root": "../YCSB",
+  "result_root": "../results",
+  "result_prefix": "filebench_fileserver_smoke",
+  "keep_result_db": false,
+  "fail_fast": true,
+  "monitoring": {
+    "event_name": "NO_RETIRED_INST_CYCLES",
+    "perf_event": "cpu/event=0xc0,cmask=1,inv=1/",
+    "df_enabled": true,
+    "df_resource_family": "CCM",
+    "df_resource_ids": [0],
+    "df_sample_slot_ms": 20
+  },
+  "assignment_generator": {
+    "kind": "prefix_density",
+    "counts": [1],
+    "base_core": 0,
+    "label_prefix": "prefix_x"
+  },
+  "backends": [
+    {
+      "name": "filebench_fileserver",
+      "threads_per_instance": 1,
+      "options": {
+        "filebench_root": "../benchmarks/filebench",
+        "runtime": "30",
+        "nthreads": "1",
+        "nfiles": "10000",
+        "meandirwidth": "20",
+        "iosize": "1m",
+        "meanappendsize": "16k",
+        "benchmark_class": "fileserver_smoke"
+      }
+    }
+  ]
+}

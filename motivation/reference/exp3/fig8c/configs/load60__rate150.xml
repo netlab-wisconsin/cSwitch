@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<benchmark>
+  <nthreads>4</nthreads>
+  <memory>128m</memory>
+  <worker_memory_mb>256</worker_memory_mb>
+  <output>/home/seunghyun/exp3/exp4/results/pr-r1-customrates-20260326T1953Z/noise_outputs/load60__rate150.txt</output>
+  <bandwidth>true</bandwidth>
+  <time>3600</time>
+  <clock>2.25</clock>
+  <silent>true</silent>
+  <core>0,1,2,3</core>
+  <numa>0,0,0,0</numa>
+  <worker_numa_policy>bind</worker_numa_policy>
+  <worker_numa_interleave_nodes></worker_numa_interleave_nodes>
+  <rate>150,150,150,150</rate>
+  <Mode>0,0,0,0</Mode>
+  <thread_alloc>false</thread_alloc>
+  <alloc_core>987</alloc_core>
+  <alloc_numa>0</alloc_numa>
+  <alloc_rate>0</alloc_rate>
+  <alloc_Mode>3</alloc_Mode>
+</benchmark>

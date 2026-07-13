@@ -1,0 +1,282 @@
+diff --git a/aslr.c b/aslr.c
+index 70c2d8b..254b2e5 100644
+--- a/aslr.c
++++ b/aslr.c
+@@ -28,10 +28,16 @@
+ void
+ linux_disable_aslr()
+ {
++	int cur;
+ 	int r;
+ 
+-	(void) personality(0xffffffff);
+-	r = personality(0xffffffff | ADDR_NO_RANDOMIZE);
++	cur = personality(0xffffffff);
++	if (cur == -1) {
++		filebench_log(LOG_ERROR, "Could not query current personality");
++		return;
++	}
++
++	r = personality(cur | ADDR_NO_RANDOMIZE);
+ 	if (r == -1)
+ 		filebench_log(LOG_ERROR, "Could not disable ASLR");
+ }
+diff --git a/ipc.c b/ipc.c
+index 058847e..edc99c4 100644
+--- a/ipc.c
++++ b/ipc.c
+@@ -130,15 +130,13 @@ ipc_mutexattr_init(int mtx_type)
+ //		filebench_shutdown(1);
+ 	}
+ #ifdef HAVE_PTHREAD_MUTEXATTR_SETPROTOCOL
+-	if (mtx_type & IPC_MUTEX_PRIORITY) {
+-		if (pthread_mutexattr_setprotocol(mtx_attrp,
+-		    PTHREAD_PRIO_INHERIT) != 0) {
+-			filebench_log(LOG_ERROR,
+-			    "cannot set mutex attr "
+-			    "PTHREAD_PRIO_INHERIT on this platform");
+-//			filebench_shutdown(1);
+-		}
+-	}
++	/*
++	 * Local harness build: skip PRIO_INHERIT mutexes.
++	 *
++	 * On this host/kernel combination the fileserver workload can crash
++	 * in FUTEX_UNLOCK_PI_PRIVATE during child teardown. Plain
++	 * PROCESS_SHARED mutexes are sufficient for our benchmark use here.
++	 */
+ #endif /* HAVE_PTHREAD_MUTEXATTR_SETPROTOCOL */
+ #endif /* HAVE_PROCSCOPE_PTHREADS */
+ #ifdef HAVE_ROBUST_MUTEX
+diff --git a/stats.c b/stats.c
+index b511789..731fc59 100644
+--- a/stats.c
++++ b/stats.c
+@@ -44,6 +44,57 @@
+ /* Global statistics */
+ static struct flowstats *globalstats = NULL;
+ 
++static unsigned long long
++stats_histogram_percentile_ns(struct flowstats *stats, double percentile)
++{
++	unsigned long long rank;
++	unsigned long long lower_ns;
++	unsigned long long upper_ns;
++	unsigned long long cumulative;
++	unsigned long long bucket_count;
++	unsigned long long previous;
++	double rank_f;
++	double fraction;
++	int i;
++
++	if (!stats || stats->fs_count <= 0)
++		return (0);
++
++	if (percentile <= 0.0)
++		return (stats->fs_minlat == ULLONG_MAX ? 0 : stats->fs_minlat);
++	if (percentile >= 100.0)
++		return (stats->fs_maxlat);
++
++	rank_f = ((double) stats->fs_count * percentile) / 100.0;
++	rank = (unsigned long long) rank_f;
++	if ((double) rank < rank_f)
++		rank++;
++	if (rank == 0)
++		rank = 1;
++
++	cumulative = 0;
++	for (i = 0; i < OSPROF_BUCKET_NUMBER; i++) {
++		bucket_count = stats->fs_distribution[i];
++		if (bucket_count == 0)
++			continue;
++		previous = cumulative;
++		cumulative += bucket_count;
++		if (cumulative < rank)
++			continue;
++
++		lower_ns = (i == 0) ? 0 : (1ULL << (i - 1));
++		upper_ns = (1ULL << i);
++		fraction = ((double) (rank - previous)) / (double) bucket_count;
++		if (fraction < 0.0)
++			fraction = 0.0;
++		if (fraction > 1.0)
++			fraction = 1.0;
++		return (unsigned long long) (lower_ns + ((upper_ns - lower_ns) * fraction));
++	}
++
++	return (stats->fs_maxlat);
++}
++
+ /*
+  * Add a flowstat b to a, leave sum in a.
+  */
+@@ -60,14 +111,16 @@ stats_add(struct flowstats *a, struct flowstats *b)
+ 	a->fs_wbytes += b->fs_wbytes;
+ 	a->fs_total_lat += b->fs_total_lat;
+ 
+-	if (b->fs_maxlat > a->fs_maxlat)
+-		a->fs_maxlat = b->fs_maxlat;
++	if (b->fs_count > 0) {
++		if (b->fs_maxlat > a->fs_maxlat)
++			a->fs_maxlat = b->fs_maxlat;
+ 
+-	if (b->fs_minlat < a->fs_minlat)
+-		a->fs_minlat = b->fs_minlat;
++		if (b->fs_minlat < a->fs_minlat)
++			a->fs_minlat = b->fs_minlat;
+ 
+-	for (i = 0; i < OSPROF_BUCKET_NUMBER; i++)
+-		a->fs_distribution[i] += b->fs_distribution[i];
++		for (i = 0; i < OSPROF_BUCKET_NUMBER; i++)
++			a->fs_distribution[i] += b->fs_distribution[i];
++	}
+ }
+ 
+ /*
+@@ -84,9 +137,14 @@ stats_snap(void)
+ {
+ 	struct flowstats *iostat = &globalstats[FLOW_TYPE_IO];
+ 	struct flowstats *aiostat = &globalstats[FLOW_TYPE_AIO];
++	struct flowstats iosummary;
+ 	hrtime_t orig_starttime;
+ 	flowop_t *flowop;
+ 	char *str;
++	char io_p99_str[64];
++	double io_avg_ms;
++	double io_min_ms;
++	double io_max_ms;
+ 	double total_time_sec;
+ 
+ 	if (!globalstats) {
+@@ -114,6 +172,8 @@ stats_snap(void)
+ 	(void) memset(globalstats, 0, FLOW_TYPES * sizeof(struct flowstats));
+ 	globalstats->fs_stime = orig_starttime;
+ 	globalstats->fs_etime = gethrtime();
++	for (int stat_index = 0; stat_index < FLOW_TYPES; stat_index++)
++		globalstats[stat_index].fs_minlat = ULLONG_MAX;
+ 
+ 	total_time_sec = (globalstats->fs_etime -
+ 			globalstats->fs_stime) / SEC2NS_FLOAT;
+@@ -178,6 +238,7 @@ stats_snap(void)
+ 		char line[1024];
+ 		char histogram[1024];
+ 		char hist_reading[20];
++		double p99_ms = 0.0;
+ 		int i = 0;
+ 
+ 		if (flowop->fo_instance != FLOW_MASTER) {
+@@ -197,11 +258,17 @@ stats_snap(void)
+ 		(void) strcat(str, line);
+ 
+ 		(void) snprintf(line, sizeof(line)," [%.3fms - %5.3fms]",
+-			flowop->fo_stats.fs_minlat / SEC2MS_FLOAT,
+-			flowop->fo_stats.fs_maxlat / SEC2MS_FLOAT);
++			flowop->fo_stats.fs_count ?
++			flowop->fo_stats.fs_minlat / SEC2MS_FLOAT : 0,
++			flowop->fo_stats.fs_count ?
++			flowop->fo_stats.fs_maxlat / SEC2MS_FLOAT : 0);
+ 		(void) strcat(str, line);
+ 
+ 		if (filebench_shm->lathist_enabled) {
++			p99_ms = stats_histogram_percentile_ns(&flowop->fo_stats, 99.0) /
++			    SEC2MS_FLOAT;
++			(void) snprintf(line, sizeof(line), " p99=%5.3fms", p99_ms);
++			(void) strcat(str, line);
+ 			(void) sprintf(histogram, "\t[ ");
+ 			for (i = 0; i < OSPROF_BUCKET_NUMBER; i++) {
+ 				(void) sprintf(hist_reading, "%lu ",
+@@ -222,18 +289,36 @@ stats_snap(void)
+ 	filebench_log(LOG_INFO, "%s", str);
+ 	free(str);
+ 
++	(void) memset(&iosummary, 0, sizeof (struct flowstats));
++	iosummary.fs_minlat = ULLONG_MAX;
++	stats_add(&iosummary, iostat);
++	stats_add(&iosummary, aiostat);
++	io_avg_ms = iosummary.fs_count ?
++	    iosummary.fs_total_lat / (iosummary.fs_count * SEC2MS_FLOAT) : 0;
++	io_min_ms = iosummary.fs_count ? iosummary.fs_minlat / SEC2MS_FLOAT : 0;
++	io_max_ms = iosummary.fs_count ? iosummary.fs_maxlat / SEC2MS_FLOAT : 0;
++	io_p99_str[0] = '\0';
++	if (filebench_shm->lathist_enabled && iosummary.fs_count > 0) {
++		double io_p99_ms;
++
++		io_p99_ms = stats_histogram_percentile_ns(&iosummary, 99.0) /
++		    SEC2MS_FLOAT;
++		(void) snprintf(io_p99_str, sizeof (io_p99_str),
++		    " p99=%5.3fms", io_p99_ms);
++	}
++
+ 	filebench_log(LOG_INFO,
+ 	    "IO Summary: %5d ops %5.3lf ops/s %0.0lf/%0.0lf rd/wr "
+-	    "%5.1lfmb/s %5.3fms/op",
+-	    iostat->fs_count + aiostat->fs_count,
+-	    (iostat->fs_count + aiostat->fs_count) / total_time_sec,
+-	    (iostat->fs_rcount + aiostat->fs_rcount) / total_time_sec,
+-	    (iostat->fs_wcount + aiostat->fs_wcount) / total_time_sec,
+-	    ((iostat->fs_bytes + aiostat->fs_bytes) / MB_FLOAT)
+-						/ total_time_sec,
+-	    (iostat->fs_count + aiostat->fs_count) ?
+-	    (iostat->fs_total_lat + aiostat->fs_total_lat) /
+-	    ((iostat->fs_count + aiostat->fs_count) * SEC2MS_FLOAT) : 0);
++	    "%5.1lfmb/s %5.3fms/op [%.3fms - %5.3fms]%s",
++	    iosummary.fs_count,
++	    iosummary.fs_count / total_time_sec,
++	    (iosummary.fs_rcount) / total_time_sec,
++	    (iosummary.fs_wcount) / total_time_sec,
++	    (iosummary.fs_bytes / MB_FLOAT) / total_time_sec,
++	    io_avg_ms,
++	    io_min_ms,
++	    io_max_ms,
++	    io_p99_str);
+ 
+ 	filebench_shm->shm_bequiet = 0;
+ }
+diff --git a/threadflow.c b/threadflow.c
+index 39fa3c2..8041af8 100644
+--- a/threadflow.c
++++ b/threadflow.c
+@@ -209,6 +209,7 @@ static int
+ threadflow_delete(threadflow_t **threadlist, threadflow_t *threadflow)
+ {
+ 	threadflow_t *entry = *threadlist;
++	threadflow_t *next = threadflow->tf_next;
+ 
+ 	filebench_log(LOG_DEBUG_IMPL, "Deleting thread: (%s-%d)",
+ 	    threadflow->tf_name,
+@@ -225,7 +226,7 @@ threadflow_delete(threadflow_t **threadlist, threadflow_t *threadflow)
+ 
+ 		threadflow_kill(threadflow);
+ 		flowop_delete_all(&threadflow->tf_thrd_fops);
+-		*threadlist = threadflow->tf_next;
++		*threadlist = next;
+ 		(void) pthread_mutex_destroy(&threadflow->tf_lock);
+ 		ipc_free(FILEBENCH_THREADFLOW, (char *)threadflow);
+ 		return (0);
+@@ -249,7 +250,7 @@ threadflow_delete(threadflow_t **threadlist, threadflow_t *threadflow)
+ 			flowop_delete_all(&entry->tf_next->tf_thrd_fops);
+ 			(void) pthread_mutex_destroy(&threadflow->tf_lock);
+ 			ipc_free(FILEBENCH_THREADFLOW, (char *)threadflow);
+-			entry->tf_next = entry->tf_next->tf_next;
++			entry->tf_next = next;
+ 			return (0);
+ 		}
+ 		entry = entry->tf_next;
+@@ -274,13 +275,15 @@ threadflow_delete_all(threadflow_t **threadlist)
+ 	filebench_log(LOG_DEBUG_IMPL, "Deleting all threads");
+ 
+ 	while (threadflow) {
++		threadflow_t *next = threadflow->tf_next;
++
+ 		if (threadflow->tf_instance &&
+ 		    (threadflow->tf_instance == FLOW_MASTER)) {
+-			threadflow = threadflow->tf_next;
++			threadflow = next;
+ 			continue;
+ 		}
+ 		(void) threadflow_delete(threadlist, threadflow);
+-		threadflow = threadflow->tf_next;
++		threadflow = next;
+ 	}
+ 
+ 	(void) ipc_mutex_unlock(&filebench_shm->shm_threadflow_lock);

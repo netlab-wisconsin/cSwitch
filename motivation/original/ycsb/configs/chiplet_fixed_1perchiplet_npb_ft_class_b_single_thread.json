@@ -1,0 +1,38 @@
+{
+  "ycsb_root": "../YCSB",
+  "result_root": "../results",
+  "result_prefix": "chiplet_npb_ft_class_b_fixed_workload_noise",
+  "keep_result_db": false,
+  "fail_fast": true,
+  "monitoring": {
+    "event_name": "NO_RETIRED_INST_CYCLES",
+    "perf_event": "cpu/event=0xc0,cmask=1,inv=1/",
+    "df_enabled": true,
+    "df_resource_family": "CCM",
+    "df_resource_ids": [0],
+    "df_sample_slot_ms": 20
+  },
+  "assignment_generator": {
+    "kind": "chiplet_density",
+    "counts": [1],
+    "chiplets": 12,
+    "cores_per_chiplet": 7,
+    "base_core": 0,
+    "label_prefix": "chiplet_x"
+  },
+  "backends": [
+    {
+      "name": "npb_instances",
+      "threads_per_instance": 1,
+      "options": {
+        "npb_root": "../../benchmarks/npb/NPB3.4.4/NPB3.4-OMP",
+        "benchmark": "ft",
+        "benchmark_class": "B"
+      },
+      "env": {
+        "OMP_PROC_BIND": "close",
+        "OMP_PLACES": "cores"
+      }
+    }
+  ]
+}

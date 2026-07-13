@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<benchmark>
+  <nthreads>12</nthreads>
+  <memory>128m</memory>
+  <worker_memory_mb>256</worker_memory_mb>
+  <output>/home/seunghyun/exp3/exp_case4-1/results/full-pr-twitter-r1-rot2-skew75-interp-20260326T175158Z/noise_outputs/pr__same-chiplet__skew75__rot2__r1__same-chiplet-rot2__noise.txt</output>
+  <bandwidth>true</bandwidth>
+  <time>3600</time>
+  <clock>2.25</clock>
+  <silent>true</silent>
+  <core>4,5,6,11,12,13,18,19,20,25,26,27</core>
+  <numa>0,0,0,0,0,0,0,0,0,0,0,0</numa>
+  <worker_numa_policy>bind</worker_numa_policy>
+  <worker_numa_interleave_nodes></worker_numa_interleave_nodes>
+  <rate>88,88,88,10,10,10,400,400,400,388,388,388</rate>
+  <Mode>0,0,0,0,0,0,0,0,0,0,0,0</Mode>
+  <thread_alloc>false</thread_alloc>
+  <alloc_core>987</alloc_core>
+  <alloc_numa>0</alloc_numa>
+  <alloc_rate>0</alloc_rate>
+  <alloc_Mode>3</alloc_Mode>
+</benchmark>
