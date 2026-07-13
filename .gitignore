@@ -1,0 +1,6 @@
+/target/
+*.log
+*.tmp
+decision.log
+runtime.log
+core

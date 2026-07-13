@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<benchmark>
+  <!-- Number of threads (including master) -->
+  <nthreads>7</nthreads>
+
+  <!-- Latency memory size: supports suffixes k, m, g -->
+  <memory>128m</memory>
+
+  <!-- Worker memory per thread in MB -->
+  <worker_memory_mb>256</worker_memory_mb>
+
+  <!-- Output file for latency results -->
+  <output>./res/latency_out.txt</output>
+
+  <!-- Run in bandwidth-only mode -->
+  <bandwidth>true</bandwidth>
+
+  <!-- Duration for bandwidth mode (seconds) -->
+  <time>30</time>
+
+  <!-- CPU clock in GHz for ns conversion -->
+  <clock>2.25</clock>
+
+  <!-- Suppress writing raw latency values -->
+  <silent>true</silent>
+
+  <!-- Per-thread core assignments (comma separated) -->
+  <core>987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987,987</core>
+
+  <!-- Per-thread NUMA node assignments -->
+  <numa>0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0</numa>
+
+  <!-- Per-thread rate values (0 = max speed) -->
+  <rate>0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1000,1000,1000,1000,1000,1000,1000,1000,1000</rate>
+
+  <!-- Per-thread RW mode (0=read,1=write,2=nt write) -->
+  <Mode>0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0</Mode>
+
+  <thread_alloc>false</thread_alloc>
+  <alloc_core>987</alloc_core>
+  <alloc_numa>0</alloc_numa>
+  <alloc_rate>0</alloc_rate>
+  <alloc_Mode>3</alloc_Mode>
+
+</benchmark>

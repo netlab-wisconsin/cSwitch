@@ -1,0 +1,59 @@
+[package]
+name = "scx-rustland-la"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-only"
+description = "Rustland-based LLC/DF-aware sched_ext scheduler for GAPBS experiments"
+build = "build.rs"
+
+[lib]
+name = "scx_rustland_la"
+path = "src/lib.rs"
+
+[[bin]]
+name = "scx-rustland-la"
+path = "src/main.rs"
+
+[[bin]]
+name = "synth_load"
+path = "src/bin/synth_load.rs"
+
+[[bin]]
+name = "mc_stride_probe"
+path = "src/bin/mc_stride_probe.rs"
+
+[features]
+default = ["diagnostics", "tick-resched"]
+diagnostics = []
+tick-resched = []
+light-compete = []
+bpf-stay-fastpath = []
+scheduler-arcas = []
+scheduler-nsdi = []
+scheduler-paper-greedy = []
+scheduler-empty-minimal = []
+scheduler-empty-observed = []
+scheduler-empty-observed-shared-sixth = []
+select-cpu-in-domain-debug = ["diagnostics"]
+stall-filler-spinner = []
+
+[dependencies]
+anyhow = "1.0.97"
+clap = { version = "4.5.32", features = ["derive", "env", "unicode", "wrap_help"] }
+crossbeam-channel = "0.5.14"
+ctrlc = { version = "3.4.5", features = ["termination"] }
+libbpf-rs = "=0.26.0-beta.1"
+libc = "0.2.171"
+log = "0.4.26"
+plain = "0.2.3"
+procfs = "0.17.0"
+scx_rustland_core = { path = "vendor/scx_rustland_core" }
+scx_utils = "1.0.26"
+simplelog = "0.12.2"
+
+[build-dependencies]
+scx_rustland_core = { path = "vendor/scx_rustland_core" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
