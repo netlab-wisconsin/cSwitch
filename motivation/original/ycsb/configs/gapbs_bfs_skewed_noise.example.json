@@ -1,0 +1,57 @@
+{
+  "ycsb_root": "../YCSB",
+  "result_root": "../results",
+  "result_prefix": "gapbs_bfs_skewed_noise",
+  "keep_result_db": false,
+  "fail_fast": true,
+  "monitoring": {
+    "event_name": "NO_RETIRED_INST_CYCLES",
+    "perf_event": "cpu/event=0xc0,cmask=1,inv=1/",
+    "df_enabled": true,
+    "df_resource_family": "CCM",
+    "df_resource_ids": [0],
+    "df_sample_slot_ms": 20
+  },
+  "background_noise": {
+    "kind": "memory_benchmark",
+    "binary": "../memory_benchmark",
+    "startup_seconds": 2,
+    "apply_during_load": false,
+    "memory": "128m",
+    "worker_memory_mb": 256,
+    "bandwidth": true,
+    "time_seconds": 86400,
+    "clock_ghz": 2.25,
+    "silent": true,
+    "rate": 0,
+    "mode": 0,
+    "thread_alloc": false,
+    "alloc_core": 0,
+    "alloc_numa": 0,
+    "alloc_rate": 0,
+    "alloc_mode": 3
+  },
+  "assignment_generator": {
+    "kind": "prefix_density",
+    "counts": [1, 2, 3, 4, 5, 6, 7],
+    "base_core": 0,
+    "label_prefix": "prefix_x"
+  },
+  "backends": [
+    {
+      "name": "gapbs_bfs",
+      "threads_per_instance": 1,
+      "options": {
+        "gapbs_root": "/home/seunghyun/gapbs/gapbs",
+        "graph": "/home/seunghyun/gapbs/gapbs/benchmark/graphs/twitter.sg",
+        "trials": "4",
+        "source_node": "0",
+        "benchmark_class": "twitter"
+      },
+      "env": {
+        "OMP_PROC_BIND": "close",
+        "OMP_PLACES": "cores"
+      }
+    }
+  ]
+}

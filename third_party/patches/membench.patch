@@ -1,0 +1,1042 @@
+diff --git a/README.md b/README.md
+index 54df31c..0da5125 100644
+--- a/README.md
++++ b/README.md
+@@ -1,17 +1,159 @@
+-# sched_bench - XML config usage
++**Memory Benchmark (sched_bench)**
+ 
+-This project can now load experiment configuration from an XML file using the `--config` option.
++This repository contains a low-level memory benchmark designed to exercise
++and measure CPU-to-memory traffic characteristics across cores and NUMA
++nodes. It focuses on measuring bandwidth, latency, and contention effects
++when running many concurrent memory streams with configurable per-thread
++behavior.
+ 
+-Usage examples:
++**How To Build**
++- **Prerequisites**: CMake >= 3.15, a C++20-capable compiler (Clang or
++	GCC), libnuma development headers (for NUMA allocations).
++- **Configure & build**:
+ 
+-- Use XML config only:
++```bash
++# Create an out-of-source build directory and configure
++cmake -S . -B build
+ 
+-  ./sched_bench --config config.example.xml
++# Build the benchmark executable
++cmake --build build
+ 
+-- Use XML config but override a value on the CLI:
++# Resulting binary: `build/memory_benchmark`
++```
+ 
+-  ./sched_bench --config config.example.xml --nthreads 8
++- **Notes**: The CMake configuration attempts to detect AVX-512 support and
++	will compile 512-bit or 256-bit variants of the streaming kernels
++	accordingly. If you prefer Clang for better clangd/IDE experience you can
++	pass `-DCMAKE_CXX_COMPILER=clang++` to `cmake` when configuring.
+ 
+-Notes:
+-- XML tags expected: nthreads, memory, worker_memory_mb, output, bandwidth, time, clock, silent, core, numa, rate, Mode
+-- Per-thread lists are comma-separated (e.g., `<core>0,1,2,3</core>`)
++**What This Benchmark Is Testing For**
++- **Raw streaming bandwidth**: how many MB/s can each worker thread push or
++	pull from memory when doing sequential or vectorized accesses.
++- **Latency of pointer-chasing workloads**: dependent-load (pointer chase)
++	permutations measure pointer-chase latency (ns per 8B word).
++- **Contention & saturation**: by running many concurrent streams across
++	cores and NUMA nodes, the benchmark reveals shared resource contention
++	(memory controllers, interconnects, LLC) and how throughput scales.
++- **NUMA behavior**: allocations can be pinned to specific NUMA nodes to
++	measure local vs remote access effects.
++
++**What Workloads Are Included**
++- **Sequential read streams**: vectorized reads implemented using 256-bit or
++	512-bit vector loads (AVX/AVX512) to saturate memory read bandwidth.
++- **Sequential writes**: vectorized writes (regular and non-temporal
++	/ streaming writes) to observe store path behavior and write-combining.
++- **Non-temporal (NT) writes**: streaming stores that bypass the cache
++	(where supported) to measure raw write bandwidth to memory.
++- **Pointer-chase / permutation reads**: dependent-load microbenchmarks for
++	measuring random-access latency (typical pointer-chasing patterns).
++- **Configurable variants**: kernels exist with different register-widths
++	and unrollings; the build chooses 512-bit codepaths when AVX-512 is
++	available and falls back to 256-bit otherwise.
++
++The assembly-backed kernels are defined in `funcs.h` (read/write/NT/permutation
++variants). The test harness (`main.cpp`) runs these kernels concurrently
++according to the user-supplied configuration.
++
++**How the Benchmark Throttles Bandwidth**
++- Each worker thread is assigned a per-thread `rate` parameter in the XML
++	configuration. The streaming kernels execute a block of vector loads/stores
++	then perform `rate` simple NOP-ish iterations (looping over an empty body)
++	between blocks.
++- Increasing `rate` inserts more local delays between memory-access blocks and
++	therefore reduces the sustained memory traffic per thread (cooperative
++	throttling). Setting `rate = 0` runs the kernel at maximum throughput.
++- This simple software back-pressure enables fine-grained control of per-
++	thread bandwidth without requiring kernel-level QoS or special hardware.
++
++**Configuration Example (from `config_lat.xml`)**
++Below is an excerpt and explanation of a real example configuration file
++included in `configs/lat-bw-contention/72+1auto/config_lat.xml`:
++
++- **Top-level options**:
++	- `nthreads`: number of worker threads (including any master/latency
++		thread). Example: `72`.
++	- `memory`: size of the pointer-chase/latency area (supports suffixes
++		like `m`/`g`). Example: `128m`.
++	- `worker_memory_mb`: memory (MB) allocated per worker thread for
++		bandwidth streams.
++	- `bandwidth`: when `true` the benchmark runs in bandwidth-only mode for
++		`time` seconds.
++	- `time`: duration to run bandwidth mode (seconds).
++	- `clock`: CPU clock in GHz used for converting cycles to ns in reports.
++	- `silent`: when `true` raw latency samples may be suppressed to reduce
++		output.
++
++- **Per-thread arrays** (comma-separated lists sized to `nthreads`):
++	- `core`: core id to pin each worker to (use `987` to allow "free roam").
++	- `numa`: NUMA node id for each worker's buffer allocation.
++	- `rate`: per-thread throttle parameter (higher = more NOPs = lower
++		sustained bandwidth). `0` means run at maximum speed.
++	- `Mode` (or `alloc_Mode`): per-thread RW mode: `0` = read, `1` = write,
++		`2` = non-temporal write (implementation-dependent values may include
++		other modes like permutation reads).
++
++- **Optional worker NUMA policy**:
++	- `worker_numa_policy`: `bind` or `interleave`. Default behavior is
++		`bind`.
++	- `worker_numa_interleave_nodes`: comma-separated NUMA node list used only
++		when `worker_numa_policy=interleave`.
++
++Example snippet (shortened):
++
++```xml
++<nthreads>72</nthreads>
++<memory>128m</memory>
++<worker_memory_mb>256</worker_memory_mb>
++<bandwidth>true</bandwidth>
++<time>50</time>
++<clock>2.25</clock>
++<silent>true</silent>
++
++<!-- Per-thread core and NUMA mappings -->
++<core>1,2,3,4,5,...</core>
++<numa>0,0,0,0,0,...</numa>
++<worker_numa_policy>bind</worker_numa_policy>
++<worker_numa_interleave_nodes></worker_numa_interleave_nodes>
++<rate>10000,10000,10000,...</rate>
++<Mode>0,0,0,0,0,...</Mode>
++
++<!-- Optional allocator thread settings -->
++<thread_alloc>true</thread_alloc>
++<alloc_core>987</alloc_core>
++<alloc_numa>0</alloc_numa>
++<alloc_rate>0</alloc_rate>
++<alloc_Mode>3</alloc_Mode>
++```
++
++**Example Run**
++- After building you can run the benchmark against a configuration file
++	(the executable is `memory_benchmark` by default):
++
++```bash
++# run using an XML configuration file
++./build/memory_benchmark configs/lat-bw-contention/72+1auto/config_lat.xml
++```
++
++If your environment requires a different path to the binary replace
++`./build/memory_benchmark` with the actual executable path.
++
++**Outputs**
++- Per-thread summary lines are printed at the end of each run that include
++	total MB transferred, elapsed time, calculated bandwidth (MB/s), and a
++	latency estimate (derived from cycles and configured clock).
++- When `silent` is false the benchmark may write additional raw latency
++	samples to files (configured via the `output` field in the XML).
++
++**Tips & Troubleshooting**
++- Ensure `libnuma` and development headers are installed; without them the
++	benchmark will fail to allocate NUMA-local memory.
++- Run with a small `nthreads` and small `worker_memory_mb` for quick smoke
++	tests before trying large configurations that may heavily load your
++	system.
++- To measure the effect of `rate` set half the threads to `rate=0` and the
++	other half to larger `rate` values to observe throttling/priority effects.
++
++**License & Contributing**
++- This repository contains low-level, architecture-specific benchmarking
++	code — please open issues or PRs if you find platform-specific bugs or
++	want to add new kernels/workloads.
+diff --git a/conf.hpp b/conf.hpp
+index bc39b01..8532ba8 100644
+--- a/conf.hpp
++++ b/conf.hpp
+@@ -10,6 +10,8 @@ struct BenchmarkConfig
+     std::string program_path = "./res/out";
+     std::vector<int> core_assignments;
+     std::vector<int> numa_assignments;
++    std::string worker_numa_policy = "bind";
++    std::vector<int> worker_numa_interleave_nodes;
+     std::vector<int> rates;           // Rate limiter for worker threads (0 = max speed)
+     std::vector<int> read_write_mode; // 0 = read, 1 = write 2 nt write
+     bool all_bandwidth_mode = false;
+diff --git a/config.example.xml b/config.example.xml
+index 2bb4a5b..7f9a15c 100644
+--- a/config.example.xml
++++ b/config.example.xml
+@@ -30,6 +30,12 @@
+   <!-- Per-thread NUMA node assignments -->
+   <numa>0,0,0,0</numa>
+ 
++  <!-- Worker NUMA allocation policy: bind or interleave -->
++  <worker_numa_policy>bind</worker_numa_policy>
++
++  <!-- Used only when worker_numa_policy=interleave -->
++  <worker_numa_interleave_nodes></worker_numa_interleave_nodes>
++
+   <!-- Per-thread rate values (0 = max speed) -->
+   <rate>0,0,0,0</rate>
+ 
+diff --git a/event.cpp b/event.cpp
+index d65655b..8b2675b 100644
+--- a/event.cpp
++++ b/event.cpp
+@@ -2,6 +2,29 @@
+ #include "event.hpp"
+ #include "cpus.h"
+ 
++namespace {
++
++constexpr auto kEventPollInterval = std::chrono::milliseconds(50);
++
++bool wait_until_or_stop(
++    const std::chrono::high_resolution_clock::time_point &target_time,
++    SharedState &state) {
++    while (!state.finished.load(std::memory_order_relaxed)) {
++        const auto now = std::chrono::high_resolution_clock::now();
++        if (now >= target_time) {
++            return true;
++        }
++
++        const auto remaining = target_time - now;
++        std::this_thread::sleep_for(
++            remaining < kEventPollInterval ? remaining : kEventPollInterval);
++    }
++
++    return false;
++}
++
++} // namespace
++
+ // Function to read and parse the CSV file
+ std::vector<Event> readCsvFile(const std::string& filename) {
+     std::vector<Event> events;
+@@ -83,10 +106,10 @@ std::vector<Event> readCsvFile(const std::string& filename) {
+ }
+ 
+ // Function to process events based on timestamps
+-void processEvents(const std::vector<Event>& events, SharedState &state) {
++bool processEvents(const std::vector<Event>& events, SharedState &state) {
+     if (events.empty()) {
+         std::cout << "No events to process." << std::endl;
+-        return;
++        return true;
+     }
+ 
+     // Get the current time as the "start" of our simulation
+@@ -100,12 +123,22 @@ void processEvents(const std::vector<Event>& events, SharedState &state) {
+     std::cout << "Starting event processing. First event timestamp: " << firstTimestamp << " ms." << std::endl;
+ 
+     for (const auto& entry : events) {
++        if (state.finished.load(std::memory_order_relaxed)) {
++            std::cout << "Event processing interrupted before timestamp "
++                      << entry.timestamp << " ms." << std::endl;
++            return false;
++        }
++
+         // Calculate the target time point in the future
+         // We add the event's timestamp (adjusted by firstTimestamp) to the startTime.
+         auto targetTime = startTime + std::chrono::milliseconds(entry.timestamp - firstTimestamp);
+ 
+         // Wait until the target time
+-        std::this_thread::sleep_until(targetTime);
++        if (!wait_until_or_stop(targetTime, state)) {
++            std::cout << "Event processing interrupted while waiting for timestamp "
++                      << entry.timestamp << " ms." << std::endl;
++            return false;
++        }
+ 
+         // Perform the job: update varying_load
+         if (entry.thread_id >= 0 && entry.thread_id < NCORE) {
+@@ -121,4 +154,5 @@ void processEvents(const std::vector<Event>& events, SharedState &state) {
+         }
+     }
+     std::cout << "Finished processing all events." << std::endl;
++    return true;
+ }
+diff --git a/event.hpp b/event.hpp
+index ed339de..174c451 100644
+--- a/event.hpp
++++ b/event.hpp
+@@ -43,4 +43,4 @@ struct Event {
+ };
+ 
+ std::vector<Event> readCsvFile(const std::string &filename);
+-void processEvents(const std::vector<Event> &events, SharedState &state);
+\ No newline at end of file
++bool processEvents(const std::vector<Event> &events, SharedState &state);
+diff --git a/funcs.h b/funcs.h
+index 2e4336f..2bd4d75 100644
+--- a/funcs.h
++++ b/funcs.h
+@@ -10,7 +10,7 @@
+ extern "C" { // Keep C linkage if they might be called from C elsewhere, or just for clarity
+ 
+     // Measures latency of pointer chasing through a permutation.
+-    void PermRead64SimpleLoop_Lat(char* memarea, int* latarr, size_t repeats, size_t size) {
++    void PermRead64SimpleLoop_Lat(char* memarea, int* latarr, size_t repeats, size_t ) {
+          // (Assembly code as provided in the original)
+          asm volatile(
+              // ... (original assembly) ...
+@@ -49,7 +49,7 @@ extern "C" { // Keep C linkage if they might be called from C elsewhere, or just
+     }
+     
+     
+-    void PermRead64SimpleLoop_Lat_Fast(char* memarea, int* latarr, size_t repeats, size_t size, size_t iter) {
++    void PermRead64SimpleLoop_Lat_Fast(char* memarea, int* latarr, size_t repeats, size_t , size_t iter) {
+         std::cout << "started measuring latency" <<std::endl;
+          // (Assembly code as provided in the original)
+          asm volatile(
+@@ -83,7 +83,39 @@ extern "C" { // Keep C linkage if they might be called from C elsewhere, or just
+          );
+     }
+     
+-    
++    void PermRead64UnrollLoop(char* memarea, size_t , size_t )
++    {
++        asm volatile(
++            "1: \n" // start of repeat loop
++            "mov    %[memarea], %%rax \n"   // rax = reset iterator
++            "2: \n" // start of read loop
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            "mov    (%%rax), %%rax \n"
++            // test read loop condition
++            "cmp    %%rax, %[memarea] \n"   // compare to first iterator
++            "jne    2b \n"
++            : 
++            : [memarea] "r" (memarea)
++            : "rax", "cc", "memory");
++    }
++
+ 
+     // Performs sequential reads using 256-bit AVX instructions.
+     void ScanRead256PtrUnrollLoop(char* memarea, size_t size, size_t rate) {
+@@ -145,6 +177,106 @@ extern "C" { // Keep C linkage if they might be called from C elsewhere, or just
+                 asm volatile("nop\n");
+         }
+     }
++
++    // Performs one scalar 64-bit read from each 64B cacheline.
++    void ScanRead64Stride64PtrUnrollLoop(char* memarea, size_t size, size_t rate) {
++        for (char* ptr = memarea; ptr < memarea + size; ptr += 8 * 64) {
++            asm volatile(
++                "mov %[ptr], %%rax\n"
++                "mov 0*64(%%rax), %%r8\n"
++                "mov 1*64(%%rax), %%r9\n"
++                "mov 2*64(%%rax), %%r10\n"
++                "mov 3*64(%%rax), %%r11\n"
++                "mov 4*64(%%rax), %%r12\n"
++                "mov 5*64(%%rax), %%r13\n"
++                "mov 6*64(%%rax), %%r14\n"
++                "mov 7*64(%%rax), %%r15\n"
++                :
++                : [ptr] "r"(ptr)
++                : "rax", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "cc", "memory"
++            );
++            for (size_t j = 0; j < rate; ++j)
++                asm volatile("nop\n");
++        }
++    }
++
++    // Performs eight scalar 64-bit reads from each 64B cacheline.
++    void ScanRead64FullLinePtrUnrollLoop(char* memarea, size_t size, size_t rate) {
++        for (char* ptr = memarea; ptr < memarea + size; ptr += 8 * 64) {
++            asm volatile(
++                "mov %[ptr], %%rax\n"
++                "mov 0(%%rax), %%r8\n"
++                "mov 8(%%rax), %%r9\n"
++                "mov 16(%%rax), %%r10\n"
++                "mov 24(%%rax), %%r11\n"
++                "mov 32(%%rax), %%r12\n"
++                "mov 40(%%rax), %%r13\n"
++                "mov 48(%%rax), %%r14\n"
++                "mov 56(%%rax), %%r15\n"
++                "mov 64(%%rax), %%r8\n"
++                "mov 72(%%rax), %%r9\n"
++                "mov 80(%%rax), %%r10\n"
++                "mov 88(%%rax), %%r11\n"
++                "mov 96(%%rax), %%r12\n"
++                "mov 104(%%rax), %%r13\n"
++                "mov 112(%%rax), %%r14\n"
++                "mov 120(%%rax), %%r15\n"
++                "mov 128(%%rax), %%r8\n"
++                "mov 136(%%rax), %%r9\n"
++                "mov 144(%%rax), %%r10\n"
++                "mov 152(%%rax), %%r11\n"
++                "mov 160(%%rax), %%r12\n"
++                "mov 168(%%rax), %%r13\n"
++                "mov 176(%%rax), %%r14\n"
++                "mov 184(%%rax), %%r15\n"
++                "mov 192(%%rax), %%r8\n"
++                "mov 200(%%rax), %%r9\n"
++                "mov 208(%%rax), %%r10\n"
++                "mov 216(%%rax), %%r11\n"
++                "mov 224(%%rax), %%r12\n"
++                "mov 232(%%rax), %%r13\n"
++                "mov 240(%%rax), %%r14\n"
++                "mov 248(%%rax), %%r15\n"
++                "mov 256(%%rax), %%r8\n"
++                "mov 264(%%rax), %%r9\n"
++                "mov 272(%%rax), %%r10\n"
++                "mov 280(%%rax), %%r11\n"
++                "mov 288(%%rax), %%r12\n"
++                "mov 296(%%rax), %%r13\n"
++                "mov 304(%%rax), %%r14\n"
++                "mov 312(%%rax), %%r15\n"
++                "mov 320(%%rax), %%r8\n"
++                "mov 328(%%rax), %%r9\n"
++                "mov 336(%%rax), %%r10\n"
++                "mov 344(%%rax), %%r11\n"
++                "mov 352(%%rax), %%r12\n"
++                "mov 360(%%rax), %%r13\n"
++                "mov 368(%%rax), %%r14\n"
++                "mov 376(%%rax), %%r15\n"
++                "mov 384(%%rax), %%r8\n"
++                "mov 392(%%rax), %%r9\n"
++                "mov 400(%%rax), %%r10\n"
++                "mov 408(%%rax), %%r11\n"
++                "mov 416(%%rax), %%r12\n"
++                "mov 424(%%rax), %%r13\n"
++                "mov 432(%%rax), %%r14\n"
++                "mov 440(%%rax), %%r15\n"
++                "mov 448(%%rax), %%r8\n"
++                "mov 456(%%rax), %%r9\n"
++                "mov 464(%%rax), %%r10\n"
++                "mov 472(%%rax), %%r11\n"
++                "mov 480(%%rax), %%r12\n"
++                "mov 488(%%rax), %%r13\n"
++                "mov 496(%%rax), %%r14\n"
++                "mov 504(%%rax), %%r15\n"
++                :
++                : [ptr] "r"(ptr)
++                : "rax", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "cc", "memory"
++            );
++            for (size_t j = 0; j < rate; ++j)
++                asm volatile("nop\n");
++        }
++    }
+     
+     // Performs sequential writes using 512-bit AVX512 instructions.
+     void ScanWrite512PtrUnrollLoop(char* memarea, size_t size, size_t rate) {
+@@ -324,4 +456,4 @@ extern "C" { // Keep C linkage if they might be called from C elsewhere, or just
+         }
+     }
+     
+-    } // extern "C"
+\ No newline at end of file
++    } // extern "C"
+diff --git a/main.cpp b/main.cpp
+index 40411e8..87f08f9 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -2,15 +2,18 @@
+ 
+ #include <atomic>    // For std::atomic
+ #include <barrier>   // For std::barrier (C++20)
++#include <cctype>    // For std::tolower
+ #include <chrono>    // For std::chrono
+ #include <cmath>     // For std::ceil
+ #include <cstddef>   // For std::size_t, std::byte (if needed)
+ #include <cstdint>   // For uint64_t etc.
++#include <csignal>   // For signal handling
+ #include <cstring>   // For std::memset
+ #include <fstream>   // For std::ofstream
+ #include <iostream>  // For std::cout, std::cerr
+ #include <memory>    // For std::unique_ptr, std::make_unique
+ #include <optional>  // For optional return values (e.g., parsing)
++#include <sstream>   // For std::ostringstream
+ #include <stdexcept> // For standard exceptions
+ #include <string>    // For std::string
+ #include <thread>    // For std::thread
+@@ -41,6 +44,85 @@ using namespace tinyxml2;
+ // assume cores < 987
+ #define FREE_ROAM 987
+ 
++namespace {
++
++constexpr int kSignalThreadWakeSignal = SIGUSR1;
++constexpr auto kStopPollInterval = std::chrono::milliseconds(50);
++
++class ScopedSignalWaiter {
++public:
++  explicit ScopedSignalWaiter(SharedState &state) : state_(state) {
++    sigemptyset(&handled_signals_);
++    sigaddset(&handled_signals_, SIGINT);
++    sigaddset(&handled_signals_, SIGTERM);
++    sigaddset(&handled_signals_, kSignalThreadWakeSignal);
++
++    const int mask_result =
++        pthread_sigmask(SIG_BLOCK, &handled_signals_, nullptr);
++    if (mask_result != 0) {
++      throw std::runtime_error("Failed to block benchmark control signals.");
++    }
++
++    waiter_thread_ = std::thread([this]() { wait_for_signal(); });
++  }
++
++  ~ScopedSignalWaiter() {
++    shutdown_requested_.store(true, std::memory_order_relaxed);
++    if (waiter_thread_.joinable()) {
++      pthread_kill(waiter_thread_.native_handle(), kSignalThreadWakeSignal);
++      waiter_thread_.join();
++    }
++  }
++
++  ScopedSignalWaiter(const ScopedSignalWaiter &) = delete;
++  ScopedSignalWaiter &operator=(const ScopedSignalWaiter &) = delete;
++
++private:
++  void wait_for_signal() {
++    int received_signal = 0;
++    while (::sigwait(&handled_signals_, &received_signal) == 0) {
++      if (received_signal == kSignalThreadWakeSignal) {
++        if (shutdown_requested_.load(std::memory_order_relaxed)) {
++          return;
++        }
++        continue;
++      }
++
++      const bool already_stopping =
++          state_.finished.exchange(true, std::memory_order_relaxed);
++      if (!already_stopping) {
++        std::cerr << "\nReceived signal " << received_signal
++                  << ". Stopping benchmark and printing partial bandwidth "
++                     "results.\n";
++      }
++    }
++  }
++
++  SharedState &state_;
++  sigset_t handled_signals_{};
++  std::atomic<bool> shutdown_requested_{false};
++  std::thread waiter_thread_;
++};
++
++template <typename Duration>
++bool wait_for_duration_or_stop(const Duration &duration, SharedState &state) {
++  const auto deadline = std::chrono::steady_clock::now() + duration;
++  while (!state.finished.load(std::memory_order_relaxed)) {
++    const auto now = std::chrono::steady_clock::now();
++    if (now >= deadline) {
++      return true;
++    }
++
++    const auto remaining = deadline - now;
++    std::this_thread::sleep_for(
++        remaining < kStopPollInterval ? remaining : kStopPollInterval);
++  }
++
++  return false;
++}
++
++} // namespace
++
+ // --- Configuration and State ---
+ // Configuration set at startup
+ struct BenchmarkConfig {
+@@ -50,6 +132,8 @@ struct BenchmarkConfig {
+   std::string program_path = "./res/out";
+   std::vector<int> core_assignments;
+   std::vector<int> numa_assignments;
++  std::string worker_numa_policy = "bind";
++  std::vector<int> worker_numa_interleave_nodes = std::vector<int>();
+   std::vector<int> rates; // Rate limiter for worker threads (0 = max speed)
+   std::vector<int> read_write_mode; // 0 = read, 1 = write 2 nt write
+   bool all_bandwidth_mode = false;
+@@ -71,8 +155,50 @@ struct BenchmarkConfig {
+ //   (char* buffer, size_t size, size_t rate)
+ using test_fn_t = void (*)(char *, size_t, size_t);
+ 
++static std::string normalize_worker_numa_policy(std::string policy) {
++  for (char &ch : policy) {
++    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
++  }
++  return policy;
++}
++
++static std::string format_node_list(const std::vector<int> &nodes) {
++  std::ostringstream stream;
++  for (std::size_t index = 0; index < nodes.size(); ++index) {
++    if (index > 0) {
++      stream << ",";
++    }
++    stream << nodes[index];
++  }
++  return stream.str();
++}
++
++static bool worker_uses_interleave(const BenchmarkConfig &config) {
++  return config.worker_numa_policy == "interleave";
++}
++
++static std::string describe_worker_numa(const BenchmarkConfig &config,
++                                        int numa_node) {
++  if (worker_uses_interleave(config)) {
++    return "NUMA Interleave Nodes: [" +
++           format_node_list(config.worker_numa_interleave_nodes) + "]";
++  }
++  return "NUMA Node: " + std::to_string(numa_node);
++}
++
++static NumaBuffer make_worker_buffer(const BenchmarkConfig &config,
++                                     int numa_node) {
++  if (worker_uses_interleave(config)) {
++    return NumaBuffer(config.worker_memory_mb * 1024 * 1024,
++                      config.worker_numa_interleave_nodes);
++  }
++  return NumaBuffer(config.worker_memory_mb * 1024 * 1024, numa_node);
++}
++
+ // Return the appropriate test function pointer for the given read/write mode.
+-// rw_mode: 0 = read, 1 = write, 2 = non-temporal write
++// rw_mode: 0 = vector read, 1 = write, 2 = non-temporal write,
++//          3 = pointer chase, 4 = scalar 8B stride64 read,
++//          5 = scalar 8x8B-per-cacheline read
+ static test_fn_t get_testfn(int rw_mode) {
+ #if USE_512BIT_OPS
+   switch (rw_mode) {
+@@ -82,6 +208,12 @@ static test_fn_t get_testfn(int rw_mode) {
+     return &ScanWrite512PtrUnrollLoop;
+   case 2:
+     return &ScanNTWrite512PtrUnrollLoop;
++  case 3: 
++    return &PermRead64UnrollLoop;
++  case 4:
++    return &ScanRead64Stride64PtrUnrollLoop;
++  case 5:
++    return &ScanRead64FullLinePtrUnrollLoop;
+   default:
+     return &ScanRead512PtrUnrollLoop;
+   }
+@@ -93,6 +225,12 @@ static test_fn_t get_testfn(int rw_mode) {
+     return &ScanWrite256PtrUnrollLoop;
+   case 2:
+     return &ScanNTWrite256PtrUnrollLoop;
++  case 3: 
++    return &PermRead64UnrollLoop;
++  case 4:
++    return &ScanRead64Stride64PtrUnrollLoop;
++  case 5:
++    return &ScanRead64FullLinePtrUnrollLoop;
+   default:
+     return &ScanRead256PtrUnrollLoop;
+   }
+@@ -116,7 +254,7 @@ int ccd_id;
+       return;
+     }
+   }
+-  std::cerr << "Worker thread " << thread_id << " started. Core: " << core_id
++  std::cerr << "Worker thread " << thread_id <<" - " <<gettid() <<" started. Core: " << core_id
+             << ", NUMA Node: " << numa_node << ", Rate: " << rate << ", mem_size: " << mem_size
+ 
+             << std::endl;
+@@ -143,11 +281,13 @@ int ccd_id;
+                              ? (total_accessed_mb / elapsed_seconds.count())
+                              : 0.0;
+ 
++  double latency = (elapsed_seconds.count() * 1e3) /
++                   (total_accessed_mb / 8); // in nanoseconds per word (8 bytes)
+   std::printf(
+       "fin: Worker %d %d (Core %d -> NUMA %d): Traffic %.2f MB generated in "
+-      "%.2f seconds. Bandwidth: %.2f MB/s (Rate: %d)\n",
++      "%.2f seconds. Bandwidth: %.2f MB/s lat : %.2f ns (Rate: %d)\n",
+       thread_id, gettid(), core_id, numa_node, total_accessed_mb,
+-      elapsed_seconds.count(), bandwidth_mbs, rate);
++      elapsed_seconds.count(), bandwidth_mbs, latency, rate);
+ }
+ 
+ void generate_memory_traffic(const BenchmarkConfig &config, SharedState &state,
+@@ -172,9 +312,9 @@ void generate_memory_traffic(const BenchmarkConfig &config, SharedState &state,
+     }
+   }
+   std::cerr << "Worker thread " << thread_id << " started. Core: " << core_id
+-            << ", NUMA Node: " << numa_node << ", Rate: " << rate << std::endl;
++            << ", " << describe_worker_numa(config, numa_node) << ", Rate: " << rate << std::endl;
+ 
+-  NumaBuffer buffer(config.worker_memory_mb * 1024 * 1024, numa_node);
++  NumaBuffer buffer = make_worker_buffer(config, numa_node);
+   char *mem_ptr = buffer.get_char();
+   std::size_t mem_size = buffer.size();
+ 
+@@ -198,12 +338,23 @@ void generate_memory_traffic(const BenchmarkConfig &config, SharedState &state,
+   double bandwidth_mbs = (elapsed_seconds.count() > 0)
+                              ? (total_accessed_mb / elapsed_seconds.count())
+                              : 0.0;
+-
+-  std::printf(
+-      "fin: Worker %d %d (Core %d -> NUMA %d): Traffic %.2f MB generated in "
+-      "%.2f seconds. Bandwidth: %.2f MB/s (Rate: %d)\n",
+-      thread_id, gettid(), core_id, numa_node, total_accessed_mb,
+-      elapsed_seconds.count(), bandwidth_mbs, rate);
++  double latency = (elapsed_seconds.count() * 1e3) /
++                   (total_accessed_mb / 8); // in nanoseconds per word (8 bytes)
++
++  if (worker_uses_interleave(config)) {
++    const std::string node_list = format_node_list(config.worker_numa_interleave_nodes);
++    std::printf(
++        "fin: Worker %d %d (Core %d -> NUMA interleave [%s]): Traffic %.2f MB "
++        "generated in %.2f seconds. Bandwidth: %.2f MB/s lat : %.2f ns (Rate: %d)\n",
++        thread_id, gettid(), core_id, node_list.c_str(), total_accessed_mb,
++        elapsed_seconds.count(), bandwidth_mbs, latency, rate);
++  } else {
++    std::printf(
++        "fin: Worker %d %d (Core %d -> NUMA %d): Traffic %.2f MB generated in "
++        "%.2f seconds. Bandwidth: %.2f MB/s lat : %.2f ns (Rate: %d)\n",
++        thread_id, gettid(), core_id, numa_node, total_accessed_mb,
++        elapsed_seconds.count(), bandwidth_mbs, latency, rate);
++  }
+ 
+   state.barrier->arrive_and_wait();
+ }
+@@ -233,7 +384,7 @@ void generate_memory_traffic_varying_log(const BenchmarkConfig &config,
+     }
+   }
+   std::cerr << "Worker thread " << thread_id << " started. Core: " << core_id
+-            << ", NUMA Node: " << numa_node << ", Rate: " << rate << std::endl;
++            << ", " << describe_worker_numa(config, numa_node) << ", Rate: " << rate << std::endl;
+ 
+   // Open output file using RAII
+   std::ofstream output_file(config.output_filename + "_" +
+@@ -249,7 +400,7 @@ void generate_memory_traffic_varying_log(const BenchmarkConfig &config,
+   }
+ 
+   // Allocate buffer on the target NUMA node using RAII
+-  NumaBuffer buffer(config.worker_memory_mb * 1024 * 1024, numa_node);
++  NumaBuffer buffer = make_worker_buffer(config, numa_node);
+   char *mem_ptr = buffer.get_char();
+   std::size_t mem_size = buffer.size();
+ 
+@@ -284,11 +435,20 @@ void generate_memory_traffic_varying_log(const BenchmarkConfig &config,
+ 
+   // Use printf for potentially better formatting control with doubles, or use
+   // iostream manipulators
+-  std::printf(
+-      "fin: Worker %d %d (Core %d -> NUMA %d), mode %d: Traffic %.2f MB "
+-      "generated in %.2f seconds. Bandwidth: %.2f MB/s (Rate: %d)\n",
+-      thread_id, gettid(), core_id, numa_node, rw_mode, total_accessed_mb,
+-      elapsed_seconds.count(), bandwidth_mbs, rate);
++  if (worker_uses_interleave(config)) {
++    const std::string node_list = format_node_list(config.worker_numa_interleave_nodes);
++    std::printf(
++        "fin: Worker %d %d (Core %d -> NUMA interleave [%s]), mode %d: Traffic %.2f MB "
++        "generated in %.2f seconds. Bandwidth: %.2f MB/s (Rate: %d)\n",
++        thread_id, gettid(), core_id, node_list.c_str(), rw_mode, total_accessed_mb,
++        elapsed_seconds.count(), bandwidth_mbs, rate);
++  } else {
++    std::printf(
++        "fin: Worker %d %d (Core %d -> NUMA %d), mode %d: Traffic %.2f MB "
++        "generated in %.2f seconds. Bandwidth: %.2f MB/s (Rate: %d)\n",
++        thread_id, gettid(), core_id, numa_node, rw_mode, total_accessed_mb,
++        elapsed_seconds.count(), bandwidth_mbs, rate);
++  }
+ 
+   // Buffer automatically freed by NumaBuffer destructor when thread exits
+   state.barrier->arrive_and_wait(); // Ensure all workers finish before main
+@@ -455,6 +615,10 @@ int main(int argc, char *argv[]) {
+           config.core_assignments = parse_csv_ints(std::string(v));
+         if (const char *v = get_text("numa"))
+           config.numa_assignments = parse_csv_ints(std::string(v));
++        if (const char *v = get_text("worker_numa_policy"))
++          config.worker_numa_policy = normalize_worker_numa_policy(std::string(v));
++        if (const char *v = get_text("worker_numa_interleave_nodes"))
++          config.worker_numa_interleave_nodes = parse_csv_ints(std::string(v));
+         if (const char *v = get_text("rate"))
+           config.rates = parse_csv_ints(std::string(v));
+         if (const char *v = get_text("Mode"))
+@@ -502,6 +666,27 @@ int main(int argc, char *argv[]) {
+     validate_array_size(config.numa_assignments, "numa");
+     validate_array_size(config.read_write_mode, "Mode");
+     validate_array_size(config.rates, "rate");
++    config.worker_numa_policy = normalize_worker_numa_policy(config.worker_numa_policy);
++    if (config.worker_numa_policy != "bind" &&
++        config.worker_numa_policy != "interleave") {
++      throw std::runtime_error(
++          "worker_numa_policy must be either 'bind' or 'interleave'.");
++    }
++    if (worker_uses_interleave(config)) {
++      if (config.worker_numa_interleave_nodes.empty()) {
++        throw std::runtime_error(
++            "worker_numa_interleave_nodes must be provided for interleave mode.");
++      }
++      for (int node : config.worker_numa_interleave_nodes) {
++        if (node < 0 || node > numa_max_node()) {
++          throw std::runtime_error("worker_numa_interleave_nodes contains an out-of-range node.");
++        }
++        if (node == 12) {
++          throw std::runtime_error(
++              "NUMA node 12 must not be used for worker interleave on this host.");
++        }
++      }
++    }
+ 
+     std::cout << "--- Configuration ---\n";
+     std::cout << "Threads: " << config.nthreads << "\n";
+@@ -532,7 +717,14 @@ int main(int argc, char *argv[]) {
+     }
+     std::cout << "Worker Mem Size (per thread): " << config.worker_memory_mb
+               << " MB\n";
+-    std::cout << "Assignments (Thread | Core | NUMA | Rate | Mode):\n";
++    std::cout << "Worker NUMA Policy: " << config.worker_numa_policy << "\n";
++    if (worker_uses_interleave(config)) {
++      std::cout << "Worker NUMA Interleave Nodes: "
++                << format_node_list(config.worker_numa_interleave_nodes) << "\n";
++      std::cout << "Assignments (Thread | Core | NUMA(bind-compat) | Rate | Mode):\n";
++    } else {
++      std::cout << "Assignments (Thread | Core | NUMA | Rate | Mode):\n";
++    }
+     for (int i = 0; i < config.nthreads; ++i) {
+       std::cout << "  " << i << " | " << config.core_assignments[i] << " | "
+                 << config.numa_assignments[i] << " | " << config.rates[i]
+@@ -541,6 +733,7 @@ int main(int argc, char *argv[]) {
+     std::cout << "---------------------\n";
+ 
+     shared_state.barrier = std::make_unique<std::barrier<>>(config.nthreads+1);
++    ScopedSignalWaiter signal_waiter(shared_state);
+ 
+     std::vector<std::thread> threads;
+     if (config.thread_alloc) {
+@@ -557,24 +750,31 @@ int main(int argc, char *argv[]) {
+       shared_state.barrier->arrive_and_wait(); // Start all threads together
+       if (config.thread_alloc) {
+         std::cout << "Waiting 1 second for settling...\n";
+-        std::this_thread::sleep_for(std::chrono::seconds(1));
+-        
+-        for (size_t j = 0; j < config.alloc_core_assignments.size(); ++j) {
+-            threads.emplace_back(_generate_memory_traffic,
+-                                 config.alloc_core_assignments[j],
+-                                 config.alloc_numa_assignments[j],
+-                                 config.alloc_rates[j],
+-                                 config.alloc_read_write_mode[j],
+-                                 config.worker_memory_mb * 1024 * 1024,
+-                                 std::ref(shared_state),
+-                                 config.nthreads + j);
++        if (wait_for_duration_or_stop(std::chrono::seconds(1), shared_state)) {
++          for (size_t j = 0; j < config.alloc_core_assignments.size(); ++j) {
++              threads.emplace_back(_generate_memory_traffic,
++                                   config.alloc_core_assignments[j],
++                                   config.alloc_numa_assignments[j],
++                                   config.alloc_rates[j],
++                                   config.alloc_read_write_mode[j],
++                                   config.worker_memory_mb * 1024 * 1024,
++                                   std::ref(shared_state),
++                                   config.nthreads + j);
++          }
++        } else {
++          std::cout << "Interrupted before starting allocator threads.\n";
+         }
+       }
+-      std::cout << "Running bandwidth measurement for 5 seconds...\n";
+-      std::this_thread::sleep_for(
+-          std::chrono::seconds(config.duration_seconds));
+-      shared_state.finished.store(true, std::memory_order_relaxed);
+-      std::cout << "Time limit reached. Signalling threads to stop.\n";
++      std::cout << "Running bandwidth measurement for "
++                << config.duration_seconds << " seconds...\n";
++      const bool completed_full_duration =
++          wait_for_duration_or_stop(std::chrono::seconds(config.duration_seconds),
++                                    shared_state);
++      if (!shared_state.finished.exchange(true, std::memory_order_relaxed)) {
++        std::cout << "Time limit reached. Signalling threads to stop.\n";
++      } else if (!completed_full_duration) {
++        std::cout << "Interrupt received. Waiting for threads to stop.\n";
++      }
+     } else if (config.programmed_mode) {
+       std::vector<Event> events = readCsvFile(config.program_path);
+       if (events.empty()) {
+@@ -590,9 +790,12 @@ int main(int argc, char *argv[]) {
+       // Run for specified duration
+       std::cout << "Running bandwidth measurement for "
+                 << config.duration_seconds << " seconds...\n";
+-      processEvents(events, std::ref(shared_state));
+-      shared_state.finished.store(true, std::memory_order_relaxed);
+-      std::cout << "Time limit reached. Signalling threads to stop.\n";
++      const bool processed_all_events = processEvents(events, shared_state);
++      if (!shared_state.finished.exchange(true, std::memory_order_relaxed)) {
++        std::cout << "Event sequence completed. Signalling threads to stop.\n";
++      } else if (!processed_all_events) {
++        std::cout << "Interrupt received. Waiting for threads to stop.\n";
++      }
+     } else {
+       threads.emplace_back(measure_latency, std::cref(config),
+                            std::ref(shared_state), 0);
+@@ -600,6 +803,8 @@ int main(int argc, char *argv[]) {
+         threads.emplace_back(generate_memory_traffic, std::cref(config),
+                              std::ref(shared_state), i);
+       }
++      shared_state.barrier->arrive_and_wait(); // Start latency/worker threads
++                                                // together
+     }
+ 
+     std::cout << "Waiting for threads to join...\n";
+diff --git a/numa_buffer.cpp b/numa_buffer.cpp
+index e87de13..b790346 100644
+--- a/numa_buffer.cpp
++++ b/numa_buffer.cpp
+@@ -1,10 +1,47 @@
+ #include "numa_buffer.hpp"
++#include "helpers.hpp"
+ 
+ #include <stdexcept>
+ #include <cstring>
+ #include <unistd.h>
+ #include <numa.h>
+ 
++namespace {
++
++void *allocate_interleaved_subset(std::size_t size, const std::vector<int> &nodes)
++{
++    if (nodes.empty())
++    {
++        throw std::runtime_error("Interleaved NUMA allocation requires at least one node.");
++    }
++
++    struct bitmask *mask = numa_bitmask_alloc(numa_max_node() + 1);
++    if (!mask)
++    {
++        throw std::runtime_error("Failed to allocate NUMA bitmask.");
++    }
++
++    for (int node : nodes)
++    {
++        if (node < 0 || node > numa_max_node())
++        {
++            numa_bitmask_free(mask);
++            throw std::runtime_error("Interleave NUMA node is out of range.");
++        }
++        numa_bitmask_setbit(mask, node);
++    }
++
++    void *memory = numa_alloc_interleaved_subset(size, mask);
++    numa_bitmask_free(mask);
++    if (!memory)
++    {
++        throw std::runtime_error("Failed to allocate interleaved NUMA memory.");
++    }
++    return memory;
++}
++
++} // namespace
++
+ NumaBuffer::NumaBuffer(std::size_t size, int node) : size_(size), node_(node)
+ {
+     if (numa_available() == -1)
+@@ -16,7 +53,19 @@ NumaBuffer::NumaBuffer(std::size_t size, int node) : size_(size), node_(node)
+     {
+         throw std::runtime_error("Failed to allocate memory on NUMA node");
+     }
+-    std::memset(memory_, 1, size_);
++    // std::memset(memory_, 1, size_);
++    make_cyclic_permutation(memory_, size_);
++}
++
++NumaBuffer::NumaBuffer(std::size_t size, const std::vector<int> &interleave_nodes)
++    : size_(size), node_(-1), interleaved_(true), interleave_nodes_(interleave_nodes)
++{
++    if (numa_available() == -1)
++    {
++        throw std::runtime_error("NUMA is not available on this system.");
++    }
++    memory_ = allocate_interleaved_subset(size_, interleave_nodes_);
++    make_cyclic_permutation(memory_, size_);
+ }
+ 
+ NumaBuffer::~NumaBuffer()
+@@ -25,11 +74,17 @@ NumaBuffer::~NumaBuffer()
+         numa_free(memory_, size_);
+ }
+ 
+-NumaBuffer::NumaBuffer(NumaBuffer &&other) noexcept : memory_(other.memory_), size_(other.size_), node_(other.node_)
++NumaBuffer::NumaBuffer(NumaBuffer &&other) noexcept
++    : memory_(other.memory_),
++      size_(other.size_),
++      node_(other.node_),
++      interleaved_(other.interleaved_),
++      interleave_nodes_(std::move(other.interleave_nodes_))
+ {
+     other.memory_ = nullptr;
+     other.size_ = 0;
+     other.node_ = -1;
++    other.interleaved_ = false;
+ }
+ 
+ NumaBuffer &NumaBuffer::operator=(NumaBuffer &&other) noexcept
+@@ -41,9 +96,12 @@ NumaBuffer &NumaBuffer::operator=(NumaBuffer &&other) noexcept
+         memory_ = other.memory_;
+         size_ = other.size_;
+         node_ = other.node_;
++        interleaved_ = other.interleaved_;
++        interleave_nodes_ = std::move(other.interleave_nodes_);
+         other.memory_ = nullptr;
+         other.size_ = 0;
+         other.node_ = -1;
++        other.interleaved_ = false;
+     }
+     return *this;
+ }
+diff --git a/numa_buffer.hpp b/numa_buffer.hpp
+index cf081d6..220ccb1 100644
+--- a/numa_buffer.hpp
++++ b/numa_buffer.hpp
+@@ -2,11 +2,13 @@
+ #pragma once
+ 
+ #include <cstddef>
++#include <vector>
+ 
+ class NumaBuffer
+ {
+ public:
+     NumaBuffer(std::size_t size, int node);
++    NumaBuffer(std::size_t size, const std::vector<int> &interleave_nodes);
+     ~NumaBuffer();
+ 
+     NumaBuffer(const NumaBuffer &) = delete;
+@@ -24,4 +26,6 @@ private:
+     void *memory_ = nullptr;
+     std::size_t size_ = 0;
+     int node_ = -1;
++    bool interleaved_ = false;
++    std::vector<int> interleave_nodes_;
+ };

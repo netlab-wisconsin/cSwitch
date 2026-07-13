@@ -1,0 +1,7 @@
+benchmark,placement,load_pct,runs,mean_trial_time_s,stdev_trial_time_s,mean_slowdown_vs_load0,mean_noise_bandwidth_mbs
+pr,same-core,0,1,0.450330,0.000000,1.000000,0.000000
+pr,same-core,100,1,2.094820,0.000000,4.651744,34448.590000
+pr,same-llc,0,1,0.445160,0.000000,1.000000,0.000000
+pr,same-llc,100,1,2.094130,0.000000,4.704219,34448.860000
+pr,optimal,0,1,0.447810,0.000000,1.000000,0.000000
+pr,optimal,100,1,0.454260,0.000000,1.014403,34932.490000

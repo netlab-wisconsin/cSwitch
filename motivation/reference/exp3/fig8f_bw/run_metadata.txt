@@ -1,0 +1,16 @@
+experiment=exp3
+pairs=intra,inter
+traffic_types=none,l3,io,full-load
+iterations=256
+samples=1
+bandwidth_repeats=10
+sweep_repeats=3
+sweep_payload_kib=64,128,256,512
+plateau_threshold=0.95
+payload_selection=sweep
+chosen_payload_bytes=262144
+chosen_payload_kib=256
+l3_threads=5
+l3_worker_memory_mb=4
+settle_seconds=2.0
+cooldown_seconds=2.0

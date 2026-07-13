@@ -1,0 +1,43 @@
+{
+  "ycsb_root": "../YCSB",
+  "result_root": "../results",
+  "result_prefix": "chiplet_ycsb_custom",
+  "keep_result_db": false,
+  "fail_fast": true,
+  "workload": {
+    "file": "../workloads/working_set_256mb.properties",
+    "working_set_mb_per_instance": 256,
+    "primary_operation": "READ",
+    "hdr_percentiles": [50, 95, 99, 99.9, 99.99]
+  },
+  "monitoring": {
+    "event_name": "NO_RETIRED_INST_CYCLES",
+    "perf_event": "cpu/event=0xc0,cmask=1,inv=1/",
+    "df_enabled": true,
+    "ccm_ids": [0, 1, 2, 3, 4, 5, 6, 7]
+  },
+  "assignments": [
+    {
+      "label": "iter_a",
+      "cores": [7, 14, 21, 28],
+      "numas": [0]
+    },
+    {
+      "label": "iter_b",
+      "cores": [7, 14, 21, 28, 35],
+      "numas": [1]
+    },
+    {
+      "label": "iter_c_no_numa_bind",
+      "cores": [0, 7, 14, 21, 28, 35]
+    }
+  ],
+  "backends": [
+    {
+      "name": "rocksdb",
+      "threads_per_instance": 1,
+      "java_active_processor_count": 1,
+      "operationcount": 1000000
+    }
+  ]
+}

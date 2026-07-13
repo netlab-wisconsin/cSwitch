@@ -1,6 +1,11 @@
 /target/
-*.log
-*.tmp
+/ae/results/
+/motivation/results/
+/archive/
+__pycache__/
+*.pyc
+/*.log
+/*.tmp
 decision.log
 runtime.log
-core
+/core

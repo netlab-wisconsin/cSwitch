@@ -1,0 +1,8 @@
+pair,traffic_type,traffic_threads,payload_kib,bandwidth_runs,mean_bandwidth_gibs,stdev_bandwidth_gibs,sum_noise_bandwidth_mbs
+intra,none,0,256,10,26.103789,0.125960,0.000000
+intra,l3,5,256,10,25.537336,0.109518,218775.430000
+intra,full-load,82,256,10,19.915952,0.086803,352336.280000
+inter,none,0,256,10,9.509903,0.052275,0.000000
+inter,l3,5,256,10,9.400623,0.025419,219228.650000
+inter,io,70,256,10,6.301307,0.036603,337665.610000
+inter,full-load,82,256,10,4.221061,0.092304,351035.260000

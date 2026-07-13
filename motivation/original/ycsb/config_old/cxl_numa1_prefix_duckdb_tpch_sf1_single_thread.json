@@ -1,0 +1,32 @@
+{
+  "ycsb_root": "../YCSB",
+  "result_root": "../results",
+  "result_prefix": "cxl_numa1_prefix_duckdb_tpch_sf1_single_thread",
+  "keep_result_db": false,
+  "fail_fast": true,
+  "monitoring": {
+    "event_name": "NO_RETIRED_INST_CYCLES",
+    "perf_event": "cpu/event=0xc0,cmask=1,inv=1/",
+    "df_enabled": true,
+    "ccm_ids": [0, 1, 2, 3, 4, 5, 6, 7]
+  },
+  "assignment_generator": {
+    "kind": "prefix_density",
+    "counts": [1, 7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84],
+    "base_core": 0,
+    "label_prefix": "prefix_x",
+    "bind_numa": 1
+  },
+  "backends": [
+    {
+      "name": "duckdb_tpch",
+      "threads_per_instance": 1,
+      "options": {
+        "scale_factor": "1",
+        "queries": "1-22",
+        "repeat": "1",
+        "cache_root": "../.cache/duckdb_tpch"
+      }
+    }
+  ]
+}

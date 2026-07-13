@@ -1,0 +1,55 @@
+ccm0
+    ccx0
+    capacity_mib_s 20000
+ccm1
+    ccx9
+    capacity_mib_s 20000
+ccm2
+    ccx3
+    capacity_mib_s 20000
+ccm3
+    ccx6
+    capacity_mib_s 20000
+ccm4
+    ccx1
+    capacity_mib_s 20000
+ccm5
+    ccx10
+    capacity_mib_s 20000
+ccm6
+    ccx4
+    capacity_mib_s 20000
+ccm7
+    ccx7
+    capacity_mib_s 20000
+
+missing
+    ccx2
+    ccx5
+    ccx8
+    ccx11
+
+cs0
+    capacity_mib_s 40000
+cs1
+    capacity_mib_s 40000
+cs2
+    capacity_mib_s 40000
+cs3
+    capacity_mib_s 40000
+cs4
+    capacity_mib_s 40000
+cs5
+    capacity_mib_s 40000
+cs6
+    capacity_mib_s 40000
+cs7
+    capacity_mib_s 40000
+cs8
+    capacity_mib_s 40000
+cs9
+    capacity_mib_s 40000
+cs10
+    capacity_mib_s 40000
+cs11
+    capacity_mib_s 40000

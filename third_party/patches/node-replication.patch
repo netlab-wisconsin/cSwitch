@@ -1,0 +1,820 @@
+diff --git a/bench_utils/src/cnr_mkbench.rs b/bench_utils/src/cnr_mkbench.rs
+index 7af2709..1453761 100644
+--- a/bench_utils/src/cnr_mkbench.rs
++++ b/bench_utils/src/cnr_mkbench.rs
+@@ -503,12 +503,13 @@ where
+         // Log the per-thread runtimes to the CSV file
+         // TODO: Ideally this can go into the runner that was previously
+         // not possible since we used criterion for the runner.
+-        let file_name = "scaleout_benchmarks_cnr.csv";
+-        let write_headers = !Path::new(file_name).exists(); // write headers only to new file
++        let file_name = std::env::var("BENCH_UTILS_CNR_CSV_PATH")
++            .unwrap_or_else(|_| String::from("scaleout_benchmarks_cnr.csv"));
++        let write_headers = !Path::new(&file_name).exists(); // write headers only to new file
+         let mut csv_file = OpenOptions::new()
+             .append(true)
+             .create(true)
+-            .open(file_name)?;
++            .open(&file_name)?;
+         let results = self.results.lock().expect("Can't lock results");
+ 
+         let mut wtr = WriterBuilder::new()
+@@ -597,9 +598,10 @@ where
+             .collect();
+ 
+         if cfg!(not(feature = "smokebench")) {
+-            let min_tput = *core_aggregate_tput.iter().min().unwrap_or(&1) / intervals;
+-            let max_tput = *core_aggregate_tput.iter().max().unwrap_or(&1) / intervals;
+-            let total_tput = core_aggregate_tput.iter().sum::<usize>() / intervals;
++            let measurement_intervals = std::cmp::max(1, intervals);
++            let min_tput = *core_aggregate_tput.iter().min().unwrap_or(&1) / measurement_intervals;
++            let max_tput = *core_aggregate_tput.iter().max().unwrap_or(&1) / measurement_intervals;
++            let total_tput = core_aggregate_tput.iter().sum::<usize>() / measurement_intervals;
+             println!(
+                 ">> {:.2} Mops (min {:.2} Mops, max {:.2}) Mops",
+                 total_tput as f64 / 1_000_000 as f64,
+@@ -958,9 +960,9 @@ where
+                 sockets.sort();
+                 sockets.dedup();
+ 
+-                for s in sockets {
++                for (rid, s) in sockets.into_iter().enumerate() {
+                     rm.insert(
+-                        s as usize,
++                        rid,
+                         cpus.iter()
+                             .filter(|c| c.socket == s)
+                             .map(|c| c.cpu)
+@@ -975,9 +977,9 @@ where
+                     l1.sort();
+                     l1.dedup();
+ 
+-                    for s in l1 {
++                    for (rid, s) in l1.into_iter().enumerate() {
+                         rm.insert(
+-                            s as usize,
++                            rid,
+                             cpus.iter().filter(|c| c.l1 == s).map(|c| c.cpu).collect(),
+                         );
+                     }
+@@ -1012,9 +1014,9 @@ where
+                 l2.sort();
+                 l2.dedup();
+ 
+-                for s in l2 {
++                for (rid, s) in l2.into_iter().enumerate() {
+                     rm.insert(
+-                        s as usize,
++                        rid,
+                         cpus.iter().filter(|c| c.l2 == s).map(|c| c.cpu).collect(),
+                     );
+                 }
+@@ -1024,9 +1026,9 @@ where
+                 l3.sort();
+                 l3.dedup();
+ 
+-                for s in l3 {
++                for (rid, s) in l3.into_iter().enumerate() {
+                     rm.insert(
+-                        s as usize,
++                        rid,
+                         cpus.iter().filter(|c| c.l3 == s).map(|c| c.cpu).collect(),
+                     );
+                 }
+diff --git a/bench_utils/src/lib.rs b/bench_utils/src/lib.rs
+index ebdde5e..4e5d373 100644
+--- a/bench_utils/src/lib.rs
++++ b/bench_utils/src/lib.rs
+@@ -35,9 +35,22 @@ impl Debug for Operation<(), ()> {
+ /// On MacOS this is not guaranteed.
+ pub type ThreadId = u64;
+ 
++fn env_flag(name: &str) -> bool {
++    std::env::var(name)
++        .map(|value| {
++            let value = value.trim().to_ascii_lowercase();
++            !(value.is_empty() || value == "0" || value == "false" || value == "no")
++        })
++        .unwrap_or(false)
++}
++
+ // Pin a thread to a core
+ #[cfg(target_os = "linux")]
+ pub fn pin_thread(core_id: topology::Cpu) {
++    if env_flag("BENCH_UTILS_DISABLE_PINNING") || env_flag("NR_DISABLE_PINNING") {
++        return;
++    }
++
+     core_affinity::set_for_current(core_affinity::CoreId {
+         id: core_id as usize,
+     });
+@@ -52,6 +65,10 @@ pub fn pin_thread(_core_id: topology::Cpu) {
+ pub fn disable_dvfs() {
+     use std::process;
+ 
++    if env_flag("BENCH_UTILS_SKIP_DVFS") || env_flag("NR_SKIP_DVFS") {
++        return;
++    }
++
+     let o = process::Command::new("sh")
+         .args(&[
+             "-s",
+diff --git a/bench_utils/src/mkbench.rs b/bench_utils/src/mkbench.rs
+index f63a88e..876726a 100644
+--- a/bench_utils/src/mkbench.rs
++++ b/bench_utils/src/mkbench.rs
+@@ -562,11 +562,13 @@ where
+             );
+         }
+ 
+-        let write_headers = !Path::new(self.file_name).exists(); // write headers only to new file
++        let file_name = std::env::var("BENCH_UTILS_CSV_PATH")
++            .unwrap_or_else(|_| String::from(self.file_name));
++        let write_headers = !Path::new(&file_name).exists(); // write headers only to new file
+         let csv_file = OpenOptions::new()
+             .append(true)
+             .create(true)
+-            .open(self.file_name)?;
++            .open(&file_name)?;
+ 
+         let mut wtr = WriterBuilder::new()
+             .has_headers(write_headers)
+diff --git a/bench_utils/src/topology.rs b/bench_utils/src/topology.rs
+index 2520ef8..e4bc2b5 100644
+--- a/bench_utils/src/topology.rs
++++ b/bench_utils/src/topology.rs
+@@ -3,6 +3,7 @@
+ 
+ //! Allows to query information about the machine's CPU topology.
+ 
++use std::collections::HashSet;
+ use std::fmt;
+ 
+ use hwloc2::*;
+@@ -17,6 +18,53 @@ pub type L1 = u64;
+ pub type L2 = u64;
+ pub type L3 = u64;
+ 
++fn parse_allowed_cpus(spec: &str) -> Result<HashSet<Cpu>, String> {
++    let mut cpus = HashSet::new();
++    for item in spec.split(',') {
++        let item = item.trim();
++        if item.is_empty() {
++            continue;
++        }
++        if let Some((start, end)) = item.split_once('-') {
++            let start = start
++                .trim()
++                .parse::<Cpu>()
++                .map_err(|err| format!("invalid cpu range start {start:?}: {err}"))?;
++            let end = end
++                .trim()
++                .parse::<Cpu>()
++                .map_err(|err| format!("invalid cpu range end {end:?}: {err}"))?;
++            if start > end {
++                return Err(format!("invalid cpu range {item:?}: start > end"));
++            }
++            for cpu in start..=end {
++                cpus.insert(cpu);
++            }
++        } else {
++            let cpu = item
++                .parse::<Cpu>()
++                .map_err(|err| format!("invalid cpu id {item:?}: {err}"))?;
++            cpus.insert(cpu);
++        }
++    }
++    Ok(cpus)
++}
++
++fn allowed_cpus_from_env() -> Option<HashSet<Cpu>> {
++    for name in ["BENCH_UTILS_ALLOWED_CPUS", "NR_ALLOWED_CPUS"] {
++        if let Ok(value) = std::env::var(name) {
++            let value = value.trim();
++            if value.is_empty() {
++                continue;
++            }
++            return Some(parse_allowed_cpus(value).unwrap_or_else(|err| {
++                panic!("failed to parse {name}={value:?}: {err}")
++            }));
++        }
++    }
++    None
++}
++
+ lazy_static! {
+     pub static ref MACHINE_TOPOLOGY: MachineTopology = MachineTopology::new();
+ }
+@@ -156,6 +204,10 @@ impl MachineTopology {
+             data.push(cpu_info);
+         }
+ 
++        if let Some(allowed_cpus) = allowed_cpus_from_env() {
++            data.retain(|cpu_info| allowed_cpus.contains(&cpu_info.cpu));
++        }
++
+         MachineTopology { data }
+     }
+ 
+diff --git a/node-replication/benches/hashmap/hashmap_comparisons.rs b/node-replication/benches/hashmap/hashmap_comparisons.rs
+index e1b7659..ca1b42d 100644
+--- a/node-replication/benches/hashmap/hashmap_comparisons.rs
++++ b/node-replication/benches/hashmap/hashmap_comparisons.rs
+@@ -15,7 +15,7 @@ use std::sync::Arc;
+ use node_replication::nr::{replica::ReplicaId, replica::ReplicaToken, Dispatch, ThreadToken};
+ use urcu_sys;
+ 
+-use super::{OpConcurrent, INITIAL_CAPACITY};
++use super::{configured_initial_capacity, OpConcurrent};
+ use bench_utils::mkbench::DsInterface;
+ 
+ /// It looks like a Replica but it's really a fully partitioned data-structure.
+@@ -146,8 +146,9 @@ pub struct CHashMapWrapper(chashmap::CHashMap<u64, u64>);
+ 
+ impl Default for CHashMapWrapper {
+     fn default() -> Self {
+-        let storage = chashmap::CHashMap::with_capacity(INITIAL_CAPACITY);
+-        for i in 0..INITIAL_CAPACITY {
++        let initial_capacity = configured_initial_capacity();
++        let storage = chashmap::CHashMap::with_capacity(initial_capacity);
++        for i in 0..initial_capacity {
+             storage.insert(i as u64, (i + 1) as u64);
+         }
+         CHashMapWrapper(storage)
+@@ -180,8 +181,9 @@ pub struct StdWrapper(parking_lot::RwLock<std::collections::HashMap<u64, u64>>);
+ 
+ impl Default for StdWrapper {
+     fn default() -> Self {
+-        let mut storage = std::collections::HashMap::with_capacity(INITIAL_CAPACITY);
+-        for i in 0..INITIAL_CAPACITY {
++        let initial_capacity = configured_initial_capacity();
++        let mut storage = std::collections::HashMap::with_capacity(initial_capacity);
++        for i in 0..initial_capacity {
+             storage.insert(i as u64, (i + 1) as u64);
+         }
+         StdWrapper(parking_lot::RwLock::new(storage))
+@@ -214,8 +216,9 @@ pub struct FlurryWrapper(flurry::HashMap<u64, u64>);
+ 
+ impl Default for FlurryWrapper {
+     fn default() -> Self {
+-        let storage = flurry::HashMap::with_capacity(INITIAL_CAPACITY);
+-        for i in 0..INITIAL_CAPACITY {
++        let initial_capacity = configured_initial_capacity();
++        let storage = flurry::HashMap::with_capacity(initial_capacity);
++        for i in 0..initial_capacity {
+             storage.pin().insert(i as u64, (i + 1) as u64);
+         }
+         FlurryWrapper(storage)
+@@ -248,8 +251,9 @@ pub struct DashWrapper(dashmap::DashMap<u64, u64>);
+ 
+ impl Default for DashWrapper {
+     fn default() -> Self {
+-        let storage = dashmap::DashMap::with_capacity(INITIAL_CAPACITY);
+-        for i in 0..INITIAL_CAPACITY {
++        let initial_capacity = configured_initial_capacity();
++        let storage = dashmap::DashMap::with_capacity(initial_capacity);
++        for i in 0..initial_capacity {
+             storage.insert(i as u64, (i + 1) as u64);
+         }
+         DashWrapper(storage)
+@@ -292,7 +296,7 @@ impl Default for RcuHashMap {
+                 crate::INITIAL_CAPACITY as u64, // initial hash-buckes
+                 crate::INITIAL_CAPACITY as u64, // minimal hash-buckets
+                 crate::INITIAL_CAPACITY as u64, // maximum hash-buckets
+-                urcu_sys::CDS_LFHT_AUTO_RESIZE as i32,
++                0,
+                 ptr::null_mut(),
+             );
+ 
+diff --git a/node-replication/benches/hashmap/main.rs b/node-replication/benches/hashmap/main.rs
+index 514b151..4659f20 100644
+--- a/node-replication/benches/hashmap/main.rs
++++ b/node-replication/benches/hashmap/main.rs
+@@ -6,8 +6,10 @@
+ #![feature(generic_associated_types)]
+ 
+ use std::collections::HashMap;
++use std::env;
+ use std::fmt::Debug;
+ use std::marker::Sync;
++use std::time::Duration;
+ 
+ use logging::warn;
+ use rand::seq::SliceRandom;
+@@ -45,6 +47,106 @@ pub const NOP: usize = 2_500_000;
+ #[cfg(not(feature = "smokebench"))]
+ pub const NOP: usize = 25_000_000;
+ 
++fn parse_env_usize_list(name: &str) -> Option<Vec<usize>> {
++    let value = env::var(name).ok()?;
++    let mut values = Vec::new();
++    for item in value.split(',') {
++        let item = item.trim();
++        if item.is_empty() {
++            continue;
++        }
++        values.push(item.parse::<usize>().unwrap_or_else(|err| {
++            panic!("failed to parse {}={:?}: {}", name, value, err)
++        }));
++    }
++    if values.is_empty() {
++        None
++    } else {
++        Some(values)
++    }
++}
++
++fn parse_env_string_list(name: &str) -> Option<Vec<String>> {
++    let value = env::var(name).ok()?;
++    let mut values = Vec::new();
++    for item in value.split(',') {
++        let item = item.trim();
++        if item.is_empty() {
++            continue;
++        }
++        values.push(item.to_string());
++    }
++    if values.is_empty() {
++        None
++    } else {
++        Some(values)
++    }
++}
++
++fn configured_write_ratios() -> Vec<usize> {
++    if let Some(mut ratios) = parse_env_usize_list("NR_HASHMAP_WRITE_RATIOS") {
++        ratios.sort();
++        ratios.dedup();
++        return ratios;
++    }
++
++    if cfg!(feature = "exhaustive") {
++        vec![0, 10, 20, 40, 60, 80, 100]
++    } else if cfg!(feature = "smokebench") {
++        vec![10]
++    } else {
++        vec![0, 10, 100]
++    }
++}
++
++fn configured_thread_counts() -> Option<Vec<usize>> {
++    let mut counts = parse_env_usize_list("NR_HASHMAP_THREAD_COUNTS")?;
++    counts.retain(|count| *count > 0);
++    counts.sort();
++    counts.dedup();
++    if counts.is_empty() {
++        None
++    } else {
++        Some(counts)
++    }
++}
++
++fn configured_initial_capacity() -> usize {
++    env::var("NR_HASHMAP_INITIAL_CAPACITY")
++        .ok()
++        .and_then(|value| value.trim().parse::<usize>().ok())
++        .unwrap_or(INITIAL_CAPACITY)
++}
++
++fn configured_key_space() -> usize {
++    env::var("NR_HASHMAP_KEY_SPACE")
++        .ok()
++        .and_then(|value| value.trim().parse::<usize>().ok())
++        .unwrap_or(KEY_SPACE)
++}
++
++fn configured_ops() -> usize {
++    env::var("NR_HASHMAP_OPS")
++        .ok()
++        .and_then(|value| value.trim().parse::<usize>().ok())
++        .unwrap_or(NOP)
++}
++
++fn configured_benchmark_duration() -> Option<Duration> {
++    env::var("NR_HASHMAP_BENCH_DURATION_SECONDS")
++        .ok()
++        .or_else(|| env::var("NR_BENCH_DURATION_SECONDS").ok())
++        .and_then(|value| value.trim().parse::<u64>().ok())
++        .map(Duration::from_secs)
++}
++
++fn configured_variants() -> Option<Vec<String>> {
++    let mut variants = parse_env_string_list("NR_HASHMAP_VARIANTS")?;
++    variants.sort();
++    variants.dedup();
++    Some(variants)
++}
++
+ /// Operations we can perform on the stack.
+ #[derive(Debug, Eq, PartialEq, Clone, Copy)]
+ pub enum OpWr {
+@@ -89,8 +191,9 @@ impl NrHashMap {
+ impl Default for NrHashMap {
+     /// Return a dummy hash-map with `INITIAL_CAPACITY` elements.
+     fn default() -> NrHashMap {
+-        let mut storage = HashMap::with_capacity(INITIAL_CAPACITY);
+-        for i in 0..INITIAL_CAPACITY {
++        let initial_capacity = configured_initial_capacity();
++        let mut storage = HashMap::with_capacity(initial_capacity);
++        for i in 0..initial_capacity {
+             storage.insert(i as u64, (i + 1) as u64);
+         }
+         NrHashMap { storage }
+@@ -231,11 +334,18 @@ where
+     <R::D as Dispatch>::ReadOperation<'static>: Send + Sync,
+     <R::D as Dispatch>::Response: Sync + Send + Debug,
+ {
+-    let ops = generate_operations(NOP, write_ratio, KEY_SPACE, UNIFORM);
++    let ops = generate_operations(configured_ops(), write_ratio, configured_key_space(), UNIFORM);
+     let bench_name = format!("{}-scaleout-wr{}", name, write_ratio);
+ 
+-    mkbench::ScaleBenchBuilder::<R>::new(ops)
+-        .thread_defaults()
++    let mut builder = mkbench::ScaleBenchBuilder::<R>::new(ops);
++    if let Some(thread_counts) = configured_thread_counts() {
++        for thread_count in thread_counts {
++            builder.threads(thread_count);
++        }
++    } else {
++        builder.thread_defaults();
++    }
++    builder
+         //.threads(1)
+         //.threads(73)
+         //.threads(96)
+@@ -262,11 +372,18 @@ where
+ 
+ /// Compare scale-out behaviour of partitioned hashmap data-structure.
+ fn partitioned_hashmap_scale_out(c: &mut TestHarness, name: &str, write_ratio: usize) {
+-    let ops = generate_operations(NOP, write_ratio, KEY_SPACE, UNIFORM);
++    let ops = generate_operations(configured_ops(), write_ratio, configured_key_space(), UNIFORM);
+     let bench_name = format!("{}-scaleout-wr{}", name, write_ratio);
+ 
+-    mkbench::ScaleBenchBuilder::<Partitioner<NrHashMap>>::new(ops)
+-        .thread_defaults()
++    let mut builder = mkbench::ScaleBenchBuilder::<Partitioner<NrHashMap>>::new(ops);
++    if let Some(thread_counts) = configured_thread_counts() {
++        for thread_count in thread_counts {
++            builder.threads(thread_count);
++        }
++    } else {
++        builder.thread_defaults();
++    }
++    builder
+         .replica_strategy(mkbench::ReplicaStrategy::PerThread)
+         .thread_mapping(ThreadMapping::Interleave)
+         .log_strategy(mkbench::LogStrategy::One)
+@@ -293,11 +410,18 @@ where
+     T: Dispatch + Sync + Default + Send,
+     <T as Dispatch>::Response: Send + Sync + Debug,
+ {
+-    let ops = generate_operations_concurrent(NOP, write_ratio, KEY_SPACE, UNIFORM);
++    let ops = generate_operations_concurrent(configured_ops(), write_ratio, configured_key_space(), UNIFORM);
+     let bench_name = format!("{}-scaleout-wr{}", name, write_ratio);
+ 
+-    mkbench::ScaleBenchBuilder::<ConcurrentDs<T>>::new(ops)
+-        .thread_defaults()
++    let mut builder = mkbench::ScaleBenchBuilder::<ConcurrentDs<T>>::new(ops);
++    if let Some(thread_counts) = configured_thread_counts() {
++        for thread_count in thread_counts {
++            builder.threads(thread_count);
++        }
++    } else {
++        builder.thread_defaults();
++    }
++    builder
+         .replica_strategy(mkbench::ReplicaStrategy::One) // Can only be One
+         .update_batch(128)
+         .thread_mapping(ThreadMapping::Interleave)
+@@ -324,15 +448,13 @@ fn main() {
+ 
+     bench_utils::disable_dvfs();
+ 
+-    let mut harness = Default::default();
+-
+-    let write_ratios = if cfg!(feature = "exhaustive") {
+-        vec![0, 10, 20, 40, 60, 80, 100]
+-    } else if cfg!(feature = "smokebench") {
+-        vec![10]
++    let mut harness = if let Some(duration) = configured_benchmark_duration() {
++        TestHarness::new(duration)
+     } else {
+-        vec![0, 10, 100]
++        Default::default()
+     };
++    let write_ratios = configured_write_ratios();
++    let variants = configured_variants();
+ 
+     unsafe {
+         urcu_sys::rcu_init();
+@@ -340,16 +462,58 @@ fn main() {
+ 
+     //hashmap_single_threaded(&mut harness);
+     for write_ratio in write_ratios.into_iter() {
+-        hashmap_scale_out::<NodeReplicated<NrHashMap>>(&mut harness, "hashmap", write_ratio);
++        if variants
++            .as_ref()
++            .map(|selected| selected.iter().any(|variant| variant == "hashmap"))
++            .unwrap_or(true)
++        {
++            hashmap_scale_out::<NodeReplicated<NrHashMap>>(&mut harness, "hashmap", write_ratio);
++        }
+ 
+         #[cfg(feature = "cmp")]
+         {
+-            partitioned_hashmap_scale_out(&mut harness, "partitioned-hashmap", write_ratio);
+-            concurrent_ds_scale_out::<CHashMapWrapper>(&mut harness, "chashmap", write_ratio);
+-            concurrent_ds_scale_out::<StdWrapper>(&mut harness, "std", write_ratio);
+-            concurrent_ds_scale_out::<FlurryWrapper>(&mut harness, "flurry", write_ratio);
+-            concurrent_ds_scale_out::<RcuHashMap>(&mut harness, "urcu", write_ratio);
+-            concurrent_ds_scale_out::<DashWrapper>(&mut harness, "dashmap", write_ratio);
++            if variants
++                .as_ref()
++                .map(|selected| selected.iter().any(|variant| variant == "partitioned-hashmap"))
++                .unwrap_or(true)
++            {
++                partitioned_hashmap_scale_out(&mut harness, "partitioned-hashmap", write_ratio);
++            }
++            if variants
++                .as_ref()
++                .map(|selected| selected.iter().any(|variant| variant == "chashmap"))
++                .unwrap_or(true)
++            {
++                concurrent_ds_scale_out::<CHashMapWrapper>(&mut harness, "chashmap", write_ratio);
++            }
++            if variants
++                .as_ref()
++                .map(|selected| selected.iter().any(|variant| variant == "std"))
++                .unwrap_or(true)
++            {
++                concurrent_ds_scale_out::<StdWrapper>(&mut harness, "std", write_ratio);
++            }
++            if variants
++                .as_ref()
++                .map(|selected| selected.iter().any(|variant| variant == "flurry"))
++                .unwrap_or(true)
++            {
++                concurrent_ds_scale_out::<FlurryWrapper>(&mut harness, "flurry", write_ratio);
++            }
++            if variants
++                .as_ref()
++                .map(|selected| selected.iter().any(|variant| variant == "urcu"))
++                .unwrap_or(true)
++            {
++                concurrent_ds_scale_out::<RcuHashMap>(&mut harness, "urcu", write_ratio);
++            }
++            if variants
++                .as_ref()
++                .map(|selected| selected.iter().any(|variant| variant == "dashmap"))
++                .unwrap_or(true)
++            {
++                concurrent_ds_scale_out::<DashWrapper>(&mut harness, "dashmap", write_ratio);
++            }
+         }
+     }
+ }
+diff --git a/node-replication/benches/lockfree/main.rs b/node-replication/benches/lockfree/main.rs
+index 10f2526..c237134 100644
+--- a/node-replication/benches/lockfree/main.rs
++++ b/node-replication/benches/lockfree/main.rs
+@@ -7,8 +7,10 @@
+ #![feature(bench_black_box)]
+ #![feature(generic_associated_types)]
+ 
++use std::env;
+ use std::fmt::Debug;
+ use std::marker::Sync;
++use std::time::Duration;
+ 
+ use bench_utils::benchmark::*;
+ use bench_utils::cnr_mkbench::{self, ReplicaTrait};
+@@ -183,6 +185,118 @@ pub const NOP: usize = 2_500_000;
+ #[cfg(not(feature = "smokebench"))]
+ pub const NOP: usize = 25_000_000;
+ 
++fn parse_env_usize_list(name: &str) -> Option<Vec<usize>> {
++    let value = env::var(name).ok()?;
++    let mut values = Vec::new();
++    for item in value.split(',') {
++        let item = item.trim();
++        if item.is_empty() {
++            continue;
++        }
++        values.push(item.parse::<usize>().unwrap_or_else(|err| {
++            panic!("failed to parse {}={:?}: {}", name, value, err)
++        }));
++    }
++    if values.is_empty() {
++        None
++    } else {
++        Some(values)
++    }
++}
++
++fn configured_write_ratios() -> Vec<usize> {
++    if let Some(mut ratios) = parse_env_usize_list("NR_SKIPLIST_WRITE_RATIOS") {
++        ratios.sort();
++        ratios.dedup();
++        return ratios;
++    }
++
++    if cfg!(feature = "exhaustive") {
++        vec![0, 10, 80, 100]
++    } else if cfg!(feature = "smokebench") {
++        vec![10]
++    } else {
++        vec![10, 100]
++    }
++}
++
++fn configured_thread_counts() -> Option<Vec<usize>> {
++    let mut counts = parse_env_usize_list("NR_SKIPLIST_THREAD_COUNTS")?;
++    counts.retain(|count| *count > 0);
++    counts.sort();
++    counts.dedup();
++    if counts.is_empty() {
++        None
++    } else {
++        Some(counts)
++    }
++}
++
++fn configured_log_counts(default_socket_width: usize) -> Vec<usize> {
++    if let Some(mut counts) = parse_env_usize_list("NR_SKIPLIST_LOG_COUNTS") {
++        counts.retain(|count| *count > 0);
++        counts.sort();
++        counts.dedup();
++        return counts;
++    }
++
++    let mut counts = vec![1];
++    if default_socket_width > 1 {
++        counts.push(default_socket_width);
++    }
++    counts.sort();
++    counts.dedup();
++    counts
++}
++
++fn configured_benchmark_duration() -> Option<Duration> {
++    env::var("NR_BENCH_DURATION_SECONDS")
++        .ok()
++        .and_then(|value| value.trim().parse::<u64>().ok())
++        .map(Duration::from_secs)
++}
++
++fn configured_initial_capacity() -> usize {
++    env::var("NR_SKIPLIST_INITIAL_CAPACITY")
++        .ok()
++        .and_then(|value| value.trim().parse::<usize>().ok())
++        .filter(|value| *value > 0)
++        .unwrap_or(INITIAL_CAPACITY)
++}
++
++fn configured_key_space() -> usize {
++    env::var("NR_SKIPLIST_KEY_SPACE")
++        .ok()
++        .and_then(|value| value.trim().parse::<usize>().ok())
++        .filter(|value| *value > 0)
++        .unwrap_or(KEY_SPACE)
++}
++
++fn configured_nop() -> usize {
++    env::var("NR_SKIPLIST_OPS")
++        .ok()
++        .and_then(|value| value.trim().parse::<usize>().ok())
++        .filter(|value| *value > 0)
++        .unwrap_or(NOP)
++}
++
++fn configure_skiplist_threads<R>(builder: &mut cnr_mkbench::ScaleBenchBuilder<R>)
++where
++    R: ReplicaTrait + 'static,
++    R::D: Dispatch + Default + Send + Sync,
++    <R::D as Dispatch>::WriteOperation: Send + Sync,
++    <R::D as Dispatch>::ReadOperation<'static>: Send + Sync,
++    <R::D as Dispatch>::Response: Send,
++{
++    if let Some(thread_counts) = configured_thread_counts() {
++        for threads in thread_counts {
++            builder.threads(threads);
++        }
++    } else {
++        builder.thread_defaults();
++    }
++}
++
+ fn _concurrent_ds_scale_out<T: Sized>(
+     c: &mut TestHarness,
+     name: &str,
+@@ -238,19 +352,20 @@ where
+     <R::D as Dispatch>::ReadOperation<'static>: Send + Sync,
+     <R::D as Dispatch>::Response: Sync + Send + Debug,
+ {
+-    let ops = generate_sops_concurrent(NOP, write_ratio, KEY_SPACE);
++    let ops = generate_sops_concurrent(configured_nop(), write_ratio, configured_key_space());
+     let topology = MachineTopology::new();
+     let sockets = topology.sockets();
+-    let cores_on_socket = topology.cpus_on_socket(sockets[0]).len();
++    let socket_width = sockets
++        .first()
++        .map(|socket| topology.cpus_on_socket(*socket).len())
++        .unwrap_or(1);
+ 
+-    let increment = cores_on_socket;
+-    let mut nlog = 0;
+-    while nlog <= cores_on_socket {
+-        let logs = std::cmp::max(1, nlog);
++    for logs in configured_log_counts(std::cmp::max(1, socket_width)).into_iter() {
+         let bench_name = format!("{}{}-scaleout-wr{}", name, logs, write_ratio);
+ 
+-        cnr_mkbench::ScaleBenchBuilder::<R>::new(ops.clone())
+-            .thread_defaults()
++        let mut builder = cnr_mkbench::ScaleBenchBuilder::<R>::new(ops.clone());
++        configure_skiplist_threads(&mut builder);
++        builder
+             .replica_strategy(cnr_mkbench::ReplicaStrategy::Socket)
+             .update_batch(128)
+             .thread_mapping(ThreadMapping::Interleave)
+@@ -272,7 +387,6 @@ where
+                     }
+                 },
+             );
+-        nlog += increment;
+     }
+ }
+ 
+@@ -284,14 +398,10 @@ fn main() {
+ 
+     bench_utils::disable_dvfs();
+ 
+-    let mut harness = Default::default();
+-    let write_ratios = if cfg!(feature = "exhaustive") {
+-        vec![0, 10, 80, 100]
+-    } else if cfg!(feature = "smokebench") {
+-        vec![10]
+-    } else {
+-        vec![10, 100]
+-    };
++    let mut harness = configured_benchmark_duration()
++        .map(TestHarness::new)
++        .unwrap_or_default();
++    let write_ratios = configured_write_ratios();
+ 
+     for write_ratio in write_ratios.into_iter() {
+         #[cfg(feature = "cmp")]
+@@ -299,7 +409,9 @@ fn main() {
+             &mut harness,
+             "skiplist-partinput",
+             write_ratio,
+-            Box::new(move || generate_sops_concurrent(NOP, write_ratio, KEY_SPACE)),
++            Box::new(move || {
++                generate_sops_concurrent(configured_nop(), write_ratio, configured_key_space())
++            }),
+         );
+ 
+         concurrent_ds_nr_scale_out::<Replica<partitioned::SkipListWrapper>>(
+diff --git a/node-replication/benches/lockfree/partitioned.rs b/node-replication/benches/lockfree/partitioned.rs
+index d529074..39d279d 100644
+--- a/node-replication/benches/lockfree/partitioned.rs
++++ b/node-replication/benches/lockfree/partitioned.rs
+@@ -11,7 +11,7 @@ use crossbeam_skiplist::SkipMap;
+ use crate::cnr_mkbench::ReplicaTrait;
+ use node_replication::cnr::{Dispatch, Log, ReplicaToken};
+ 
+-use super::{OpWr, SkipListConcurrent, INITIAL_CAPACITY};
++use super::{configured_initial_capacity, OpWr, SkipListConcurrent};
+ 
+ /// A wrapper that implements ReplicaTrait which just submits everything against
+ /// the data-structure that is already concurrent.
+@@ -93,7 +93,7 @@ pub struct SkipListWrapper(SkipMap<u64, u64>);
+ impl Default for SkipListWrapper {
+     fn default() -> Self {
+         let storage = SkipMap::new();
+-        for i in 0..INITIAL_CAPACITY {
++        for i in 0..configured_initial_capacity() {
+             storage.insert(i as u64, i as u64);
+         }
+         SkipListWrapper(storage)
+diff --git a/node-replication/src/lib.rs b/node-replication/src/lib.rs
+index f0c6adf..fb80518 100644
+--- a/node-replication/src/lib.rs
++++ b/node-replication/src/lib.rs
+@@ -9,15 +9,12 @@
+ 
+ #![no_std]
+ #![feature(
+-    new_uninit,
+     get_mut_unchecked,
+     negative_impls,
+     allocator_api,
+-    box_syntax,
+-    generic_associated_types,
+-    nonnull_slice_from_raw_parts,
+     doc_auto_cfg,
+-    core_intrinsics
++    core_intrinsics,
++    new_zeroed_alloc
+ )]
+ #[cfg(test)]
+ extern crate std;

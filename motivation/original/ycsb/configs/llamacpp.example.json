@@ -1,0 +1,39 @@
+{
+  "ycsb_root": "../YCSB",
+  "result_root": "../results",
+  "result_prefix": "llamacpp_smoke",
+  "keep_result_db": false,
+  "fail_fast": true,
+  "monitoring": {
+    "event_name": "NO_RETIRED_INST_CYCLES",
+    "perf_event": "cpu/event=0xc0,cmask=1,inv=1/",
+    "df_enabled": true,
+    "df_resource_family": "CCM",
+    "df_resource_ids": [0],
+    "df_sample_slot_ms": 20
+  },
+  "assignment_generator": {
+    "kind": "prefix_density",
+    "counts": [1],
+    "base_core": 0,
+    "label_prefix": "prefix_x"
+  },
+  "backends": [
+    {
+      "name": "llamacpp",
+      "threads_per_instance": 1,
+      "options": {
+        "llama_root": "../benchmarks/llama.cpp",
+        "model": "../../llama.cpp/models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        "n_prompt": "8",
+        "n_gen": "8",
+        "batch_size": "128",
+        "ubatch_size": "128",
+        "repetitions": "1",
+        "n_gpu_layers": "0",
+        "numa": "numactl",
+        "benchmark_class": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+      }
+    }
+  ]
+}

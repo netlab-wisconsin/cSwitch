@@ -1,0 +1,6 @@
+rate,target_pct,measured_sum_noise_bandwidth_mbs
+600,20,
+300,40,
+150,60,
+100,80,
+0,100,

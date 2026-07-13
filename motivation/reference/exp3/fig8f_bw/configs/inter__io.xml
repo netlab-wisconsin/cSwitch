@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<benchmark>
+  <nthreads>70</nthreads>
+  <memory>128m</memory>
+  <worker_memory_mb>64</worker_memory_mb>
+  <output>/home/seunghyun/exp3/exp3/results/full-run-bench4-release/noise_outputs/inter__io.txt</output>
+  <bandwidth>true</bandwidth>
+  <time>3600</time>
+  <clock>2.25</clock>
+  <silent>true</silent>
+  <core>14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83</core>
+  <numa>0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0</numa>
+  <rate>0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0</rate>
+  <Mode>0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0</Mode>
+  <thread_alloc>false</thread_alloc>
+  <alloc_core>987</alloc_core>
+  <alloc_numa>0</alloc_numa>
+  <alloc_rate>0</alloc_rate>
+  <alloc_Mode>3</alloc_Mode>
+</benchmark>

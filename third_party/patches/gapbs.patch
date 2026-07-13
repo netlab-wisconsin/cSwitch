@@ -1,0 +1,125 @@
+diff --git a/benchmark/bench.mk b/benchmark/bench.mk
+index 23ac50b..7953b63 100644
+--- a/benchmark/bench.mk
++++ b/benchmark/bench.mk
+@@ -9,7 +9,7 @@
+ GRAPH_DIR = benchmark/graphs
+ RAW_GRAPH_DIR = benchmark/graphs/raw
+ 
+-GRAPHS = twitter web road kron urand
++GRAPHS = twitter
+ ALL_GRAPHS =\
+ 	$(addsuffix .sg, $(GRAPHS)) \
+ 	$(addsuffix .wsg, $(GRAPHS)) \
+diff --git a/src/bfs.cc b/src/bfs.cc
+index 4223811..99b5e6e 100644
+--- a/src/bfs.cc
++++ b/src/bfs.cc
+@@ -188,8 +188,10 @@ void PrintBFSStats(const Graph &g, const pvector<NodeID> &bfs_tree) {
+       tree_size++;
+     }
+   }
+-  cout << "BFS Tree has " << tree_size << " nodes and ";
+-  cout << n_edges << " edges" << endl;
++  cout << "BFS Reachable Set has " << tree_size << " nodes and ";
++  cout << n_edges << " examined edges" << endl;
++  PrintStep("Visited Nodes", tree_size);
++  PrintStep("Traversed Edges", n_edges);
+ }
+ 
+ 
+diff --git a/src/pr.cc b/src/pr.cc
+index 7d99900..f961575 100644
+--- a/src/pr.cc
++++ b/src/pr.cc
+@@ -30,17 +30,23 @@ using namespace std;
+ typedef float ScoreT;
+ const float kDamp = 0.85;
+ 
++struct PRResult {
++  pvector<ScoreT> scores;
++  int iterations;
++};
+ 
+-pvector<ScoreT> PageRankPullGS(const Graph &g, int max_iters, double epsilon=0,
+-                               bool logging_enabled = false) {
++PRResult PageRankPullGS(const Graph &g, int max_iters, double epsilon=0,
++                        bool logging_enabled = false) {
+   const ScoreT init_score = 1.0f / g.num_nodes();
+   const ScoreT base_score = (1.0f - kDamp) / g.num_nodes();
+   pvector<ScoreT> scores(g.num_nodes(), init_score);
+   pvector<ScoreT> outgoing_contrib(g.num_nodes());
++  int iterations = 0;
+   #pragma omp parallel for
+   for (NodeID n=0; n < g.num_nodes(); n++)
+     outgoing_contrib[n] = init_score / g.out_degree(n);
+   for (int iter=0; iter < max_iters; iter++) {
++    iterations = iter + 1;
+     double error = 0;
+     #pragma omp parallel for reduction(+ : error) schedule(dynamic, 16384)
+     for (NodeID u=0; u < g.num_nodes(); u++) {
+@@ -57,14 +63,22 @@ pvector<ScoreT> PageRankPullGS(const Graph &g, int max_iters, double epsilon=0,
+     if (error < epsilon)
+       break;
+   }
+-  return scores;
++  return {std::move(scores), iterations};
+ }
+ 
+ 
+-void PrintTopScores(const Graph &g, const pvector<ScoreT> &scores) {
++void PrintPRStats(const Graph &g, const PRResult &result) {
++  int64_t traversed_edges =
++      static_cast<int64_t>(result.iterations) * g.num_edges_directed();
++  PrintStep("PageRank Iterations", static_cast<int64_t>(result.iterations));
++  PrintStep("Traversed Edges", traversed_edges);
++}
++
++
++void PrintTopScores(const Graph &g, const PRResult &result) {
+   vector<pair<NodeID, ScoreT>> score_pairs(g.num_nodes());
+   for (NodeID n=0; n < g.num_nodes(); n++) {
+-    score_pairs[n] = make_pair(n, scores[n]);
++    score_pairs[n] = make_pair(n, result.scores[n]);
+   }
+   int k = 5;
+   vector<pair<ScoreT, NodeID>> top_k = TopK(score_pairs, k);
+@@ -75,18 +89,18 @@ void PrintTopScores(const Graph &g, const pvector<ScoreT> &scores) {
+ 
+ // Verifies by asserting a single serial iteration in push direction has
+ //   error < target_error
+-bool PRVerifier(const Graph &g, const pvector<ScoreT> &scores,
++bool PRVerifier(const Graph &g, const PRResult &result,
+                         double target_error) {
+   const ScoreT base_score = (1.0f - kDamp) / g.num_nodes();
+   pvector<ScoreT> incoming_sums(g.num_nodes(), 0);
+   double error = 0;
+   for (NodeID u : g.vertices()) {
+-    ScoreT outgoing_contrib = scores[u] / g.out_degree(u);
++    ScoreT outgoing_contrib = result.scores[u] / g.out_degree(u);
+     for (NodeID v : g.out_neigh(u))
+       incoming_sums[v] += outgoing_contrib;
+   }
+   for (NodeID n : g.vertices()) {
+-    error += fabs(base_score + kDamp * incoming_sums[n] - scores[n]);
++    error += fabs(base_score + kDamp * incoming_sums[n] - result.scores[n]);
+     incoming_sums[n] = 0;
+   }
+   PrintTime("Total Error", error);
+@@ -103,9 +117,13 @@ int main(int argc, char* argv[]) {
+   auto PRBound = [&cli] (const Graph &g) {
+     return PageRankPullGS(g, cli.max_iters(), cli.tolerance(), cli.logging_en());
+   };
+-  auto VerifierBound = [&cli] (const Graph &g, const pvector<ScoreT> &scores) {
+-    return PRVerifier(g, scores, cli.tolerance());
++  auto StatsBound = [] (const Graph &g, const PRResult &result) {
++    PrintPRStats(g, result);
++    PrintTopScores(g, result);
++  };
++  auto VerifierBound = [&cli] (const Graph &g, const PRResult &result) {
++    return PRVerifier(g, result, cli.tolerance());
+   };
+-  BenchmarkKernel(cli, g, PRBound, PrintTopScores, VerifierBound);
++  BenchmarkKernel(cli, g, PRBound, StatsBound, VerifierBound);
+   return 0;
+ }

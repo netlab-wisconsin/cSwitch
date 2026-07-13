@@ -1,0 +1,11 @@
+benchmark,policy,skewness,rotation,combo_id,combo_counts,workload_core_map,runs,mean_trial_time_s,stdev_trial_time_s,mean_total_noise_bandwidth_mbs
+pr,optimal,0,2,optimal,"ccd0=4,ccd1=4,ccd2=1,ccd3=0","ccd0:0,1,2,3;ccd1:7,8,9,10;ccd2:14;ccd3:",1,18.856080,0.000000,58102.550000
+pr,optimal,25,2,optimal,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,18.389330,0.000000,62468.680000
+pr,optimal,50,2,optimal,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,18.355060,0.000000,72612.600000
+pr,optimal,75,2,optimal,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,19.265320,0.000000,76514.790000
+pr,optimal,100,2,optimal,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,21.045880,0.000000,89081.980000
+pr,same-chiplet,0,2,same-chiplet-rot3,"ccd0=0,ccd1=4,ccd2=4,ccd3=1","ccd0:;ccd1:7,8,9,10;ccd2:14,15,16,17;ccd3:21",1,18.801860,0.000000,58114.710000
+pr,same-chiplet,25,2,same-chiplet-rot0,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,18.418710,0.000000,62454.330000
+pr,same-chiplet,50,2,same-chiplet-rot0,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,18.426450,0.000000,72625.380000
+pr,same-chiplet,75,2,same-chiplet-rot0,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,19.218040,0.000000,76470.330000
+pr,same-chiplet,100,2,same-chiplet-rot0,"ccd0=1,ccd1=0,ccd2=4,ccd3=4","ccd0:0;ccd1:;ccd2:14,15,16,17;ccd3:21,22,23,24",1,21.108060,0.000000,89058.620000

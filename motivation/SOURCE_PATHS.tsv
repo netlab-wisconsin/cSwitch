@@ -1,0 +1,15 @@
+figure	frozen_path	original_path	note
+2-6	original/ycsb	/home/seunghyun/ycsb	Runner/config source snapshot
+2-6	plots/fig2-6	/home/seunghyun/chipletos/gnuplot/motivation	Paper plot source and inputs
+3	reference/ycsb/fig3_ycsb	/home/seunghyun/ycsb/results/chiplet_ycsb_256mib_madracks-mnode5_20260314T060453Z_1429430	Exact raw summaries
+3	reference/ycsb/fig3_duckdb	/home/seunghyun/ycsb/results/chiplet_duckdb_tpch_sf1_single_thread_q21_madracks-mnode5_20260314T231814Z_2017190	Exact raw summaries
+4	reference/ycsb/dimm_exp.tsv	/home/seunghyun/ycsb/results/dimm_exp.tsv	Combined 1/2/4/8/12-DIMM summary; paper uses 1/2/4/12
+5	reference/ycsb/last_merge_smt14_numa.json	/home/seunghyun/ycsb/scripts/last_merge_smt14_numa.json	Exact selected result roots
+6	reference/ycsb/last_merge_bw_ineq.json	/home/seunghyun/ycsb/scripts/last_merge_bw_ineq.json	Exact selected result roots
+8ab	reference/exp3/fig8ab	/home/seunghyun/exp3/exp1/results/full-run-k20-sudo-perf-same-chiplet-4avg-merged-busy-pr4avg	Paper merged result
+8c	reference/exp3/fig8c	/home/seunghyun/exp3/exp4/results/pr-r1-customrates-20260326T1953Z	Loads 0-80
+8c	reference/exp3/fig8c_load100	/home/seunghyun/exp3/exp4/results/pr-r1-load100-rate50-clean-20260326T2026Z	Clean load-100 replacement
+8d	reference/exp3/fig8d	/home/seunghyun/exp3/exp_case3/results/full-numa13-plus-core21-numa1-20260325T2240Z	NPS4 two-DIMM result
+8e	reference/exp3/fig8e	/home/seunghyun/exp3/exp_case4-1/results/full-pr-twitter-r1-rot2-skew75-interp-20260326T175158Z	Paper plot result
+8f	reference/exp3/fig8f	/home/seunghyun/exp3/exp_case4-2/results/full-skiplist-r1-rot2-skew75-interp-20260326T182343Z	Paper plot result
+8f	reference/exp3/fig8f_bw	/home/seunghyun/exp3/exp3/results/full-run-bench4-release	Path-bandwidth table
