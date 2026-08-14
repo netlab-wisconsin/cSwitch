@@ -1,6 +1,6 @@
-# scx-rustland-la
+# cSwitch
 
-`scx-rustland-la` is the scheduler source repository. It contains the Rust
+`cSwitch` is the scheduler source repository. It contains the Rust
 userspace scheduler, the shared BPF backend, vendored build inputs, and
 scheduler tests. Paper evaluation and artifact-evaluation runners intentionally
 live in a separate repository/package.
@@ -15,12 +15,6 @@ live in a separate repository/package.
 - a host-specific CCM/CS-link mapping file
 
 ## Build
-
-Build the default scheduler:
-
-```sh
-cargo build --release --bin scx-rustland-la
-```
 
 Build the scheduler used as cSwitch in the paper:
 
