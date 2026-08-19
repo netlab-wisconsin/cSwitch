@@ -40,7 +40,11 @@ GAPBS_GRAPH_ROOT = environment_path(
 )
 YCSB_ROOT = environment_path("AE_YCSB_ROOT", "/home/seunghyun/ycsb")
 YCSB_RUNNER = environment_path(
-    "AE_YCSB_RUNNER", YCSB_ROOT / "scripts" / "run_chiplet_ycsb_harness.py"
+    "AE_YCSB_RUNNER",
+    PACKAGE_ROOT / "motivation" / "original" / "ycsb" / "scripts" / "run_chiplet_ycsb_harness.py",
+)
+ORIENTDB_JAVA_HOME = environment_path(
+    "AE_ORIENTDB_JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64/jre"
 )
 AE_EXTERNAL_RUNNER = AE_ROOT / "external_workload.py"
 EEVDF_ROOT = environment_path("AE_EEVDF_ROOT", "/home/seunghyun/scx_rustland_eevdf")
@@ -609,6 +613,10 @@ def workload_cpus(spec: RunSpec, args: argparse.Namespace) -> list[int]:
     return parse_cpu_list(workload_cpu_text(spec, args))
 
 
+def uses_shared_instance_affinity(spec: RunSpec) -> bool:
+    return spec.figure == "fig10" and workload_style(spec) != "1x28"
+
+
 def generic_noise_profile(spec: RunSpec, args: argparse.Namespace) -> NoiseProfile | None:
     if spec.figure == "fig10" and spec.case != "clean":
         cpus = cpus_from_mask(args.fig10_noise_cpus)
@@ -953,6 +961,34 @@ def remove_tree_best_effort(path: Path, *, use_sudo: bool) -> bool:
     return not path.exists()
 
 
+def archive_workload_diagnostics(run_dir: Path) -> list[str]:
+    harness_root = run_dir / "harness_results"
+    if not harness_root.exists():
+        return []
+    archive_root = run_dir / "workload_diagnostics"
+    archived: list[str] = []
+    diagnostic_names = {"perf.stat", "time.txt"}
+    diagnostic_suffixes = {".log", ".hdr"}
+    for workload_root in sorted(harness_root.glob("*/runs/*/workload")):
+        if not workload_root.is_dir():
+            continue
+        for source in sorted(workload_root.rglob("*")):
+            if not source.is_file():
+                continue
+            if source.name not in diagnostic_names and source.suffix not in diagnostic_suffixes:
+                continue
+            relative = source.relative_to(harness_root)
+            destination = archive_root / relative
+            try:
+                ensure_dir(destination.parent)
+                shutil.copy2(source, destination)
+            except OSError as exc:
+                log(f"warning: could not archive workload diagnostic {source}: {exc}")
+                continue
+            archived.append(str(destination))
+    return archived
+
+
 def prune_heavy_workload_artifacts(run_dir: Path, *, keep: bool, use_sudo: bool) -> list[str]:
     if keep:
         return []
@@ -1015,7 +1051,12 @@ def write_chiplet_harness_config(spec: RunSpec, args: argparse.Namespace, run_di
         elif workload.backend == "filebench_fileserver":
             backend_options["nthreads"] = str(spec.threads)
     assignment_metadata: MappingLike = {}
-    if spec.figure == "fig11":
+    if uses_shared_instance_affinity(spec):
+        assignment_metadata = {
+            "instance_count": len(cpus),
+            "shared_cpu_selector": format_cpu_list(cpus),
+        }
+    elif spec.figure == "fig11":
         assignment_metadata = {
             "instance_count": 1,
             "shared_cpu_selector": workload_cpu_text(spec, args),
@@ -1032,6 +1073,8 @@ def write_chiplet_harness_config(spec: RunSpec, args: argparse.Namespace, run_di
         "load_props": {},
         "run_props": {},
     }
+    if workload.backend == "orientdb":
+        backend["env"] = {"JAVA_HOME": str(ORIENTDB_JAVA_HOME)}
     payload: MappingLike = {
         "ycsb_root": str(workload.ycsb_root),
         "result_root": str(run_dir / "harness_results"),
@@ -1042,6 +1085,7 @@ def write_chiplet_harness_config(spec: RunSpec, args: argparse.Namespace, run_di
         "monitoring": {
             "event_name": "NO_RETIRED_INST_CYCLES",
             "perf_event": "cpu/event=0xc0,cmask=1,inv=1/",
+            "perf_enabled": False,
             "df_enabled": True,
             "df_resource_family": workload.monitoring_family,
             "df_resource_ids": list(workload.monitoring_ids),
@@ -1075,6 +1119,7 @@ def write_external_workload_config(spec: RunSpec, args: argparse.Namespace, run_
     cpus = workload_cpus(spec, args)
     style = workload_style(spec)
     single_instance = style == "1x28"
+    shared_instance_affinity = uses_shared_instance_affinity(spec)
     payload: MappingLike = {
         "runner_kind": "external",
         "benchmark": spec.benchmark,
@@ -1089,7 +1134,9 @@ def write_external_workload_config(spec: RunSpec, args: argparse.Namespace, run_
         "effective_threads": len(cpus) if single_instance else 1,
         "workload_cpus": cpus,
         "workload_cpu_mask": format_cpu_list(cpus),
-        "shared_workload_cpu_mask": format_cpu_list(cpus) if single_instance else None,
+        "shared_workload_cpu_mask": (
+            format_cpu_list(cpus) if single_instance or shared_instance_affinity else None
+        ),
         "result_root": str(run_dir / "harness_results"),
         "result_prefix": spec.run_id,
         "runner_options": dict(workload.external_options),
@@ -1464,6 +1511,27 @@ def parse_instance_summary_fallback(group_summary_path: Path | None) -> MappingL
     }
 
 
+def parse_ycsb_completed_operations(group_summary_path: Path | None) -> int | None:
+    if group_summary_path is None:
+        return None
+    operation_path = group_summary_path.with_name("instance_operation_summary.tsv")
+    if not operation_path.exists():
+        return None
+    total = 0
+    found = False
+    with operation_path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            operation = (row.get("operation") or "").upper()
+            if "FAILED" in operation or operation == "CLEANUP":
+                continue
+            value = optional_float(row.get("operations"))
+            if value is None or not math.isfinite(value) or value <= 0.0:
+                continue
+            total += int(value)
+            found = True
+    return total if found and total > 0 else None
+
+
 def parse_direct_gapbs_metric(stdout_path: Path) -> MappingLike:
     if not stdout_path.exists():
         return {"metric_value": None, "metric_error": "missing workload stdout"}
@@ -1583,6 +1651,7 @@ def parse_metric(run_dir: Path, spec: RunSpec) -> MappingLike:
         return {**harness_payload, "metric_value": None, "metric_error": "group_summary.tsv not found or empty"}
 
     fallback = parse_instance_summary_fallback(group_summary_path)
+    group_status = group_row.get("status", "")
     benchmark_time = optional_float(group_row.get("benchmark_time_s"))
     if benchmark_time is None:
         benchmark_time = optional_float(fallback.get("fallback_benchmark_time_s"))
@@ -1594,6 +1663,25 @@ def parse_metric(run_dir: Path, spec: RunSpec) -> MappingLike:
         throughput = optional_float(group_row.get("throughput_ops_per_sec"))
     if throughput is None:
         throughput = optional_float(fallback.get("fallback_throughput_ops_per_sec"))
+
+    if workload.backend in {"rocksdb", "orientdb", "elasticsearch"}:
+        if group_status != "ok":
+            return {
+                **harness_payload,
+                "metric_value": None,
+                "metric_error": f"YCSB group status is {group_status or 'missing'}",
+                "group_status": group_status,
+            }
+        completed_operations = parse_ycsb_completed_operations(group_summary_path)
+        group_wall_ms = optional_float(group_row.get("group_wall_clock_ms"))
+        if completed_operations is None or group_wall_ms is None or group_wall_ms <= 0.0:
+            return {
+                **harness_payload,
+                "metric_value": None,
+                "metric_error": "YCSB result has no positive parsed operations or wall time",
+                "group_status": group_status,
+            }
+        throughput = float(completed_operations) / (group_wall_ms / 1000.0)
 
     value: float | None
     unit: str
@@ -1612,7 +1700,7 @@ def parse_metric(run_dir: Path, spec: RunSpec) -> MappingLike:
             **harness_payload,
             "metric_value": None,
             "metric_error": "group_summary.tsv did not contain the selected primary metric",
-            "group_status": group_row.get("status", ""),
+            "group_status": group_status,
         }
     return {
         **harness_payload,
@@ -1623,7 +1711,7 @@ def parse_metric(run_dir: Path, spec: RunSpec) -> MappingLike:
         "benchmark_rate": benchmark_rate,
         "benchmark_rate_unit": group_row.get("benchmark_rate_unit", ""),
         "throughput_ops_per_sec": throughput,
-        "group_status": group_row.get("status", ""),
+        "group_status": group_status,
     }
 
 
@@ -1835,11 +1923,13 @@ def execute_spec(spec: RunSpec, args: argparse.Namespace, binary_paths: dict[str
         "launcher_stdout_log": str(run_dir / "launcher.stdout.log"),
         "launcher_stderr_log": str(run_dir / "launcher.stderr.log"),
         "cleanup_complete": False,
+        "archived_workload_diagnostics": [],
         "pruned_workload_artifacts": [],
         "finished_at": now_utc_iso(),
     }
     write_json(status_path, payload)
     cleanup_processes_for_run(run_dir, spec.run_id, use_sudo=args.use_sudo)
+    payload["archived_workload_diagnostics"] = archive_workload_diagnostics(run_dir)
     payload["pruned_workload_artifacts"] = prune_heavy_workload_artifacts(
         run_dir,
         keep=args.keep_heavy_workload_artifacts,
@@ -2050,6 +2140,11 @@ def check(args: argparse.Namespace) -> int:
         ("scheduler_source", (SCHEDULER_ROOT / "src" / "main.rs").exists()),
         ("ae_external_runner", AE_EXTERNAL_RUNNER.exists()),
         ("ycsb_runner", YCSB_RUNNER.exists()),
+        (
+            "orientdb_java",
+            (ORIENTDB_JAVA_HOME / "bin" / "java").is_file()
+            and os.access(ORIENTDB_JAVA_HOME / "bin" / "java", os.X_OK),
+        ),
         ("gapbs_pr", bool(WORKLOADS["gapbs_pr_kron20"].binary and WORKLOADS["gapbs_pr_kron20"].binary.exists())),
         ("gapbs_bc", bool(WORKLOADS["gapbs_bc_kron20_twitter"].binary and WORKLOADS["gapbs_bc_kron20_twitter"].binary.exists())),
         ("gapbs_twitter_graph", (GAPBS_GRAPH_ROOT / "twitter.sg").exists()),

@@ -73,7 +73,10 @@ $AE_YCSB_ROOT/
 ```
 
 The artifact preserves the author-written `scripts/`, `chiplet_harness/`, and
-`workloads/` files under `motivation/original/ycsb/`. Install those three
+`workloads/` files under `motivation/original/ycsb/`. Primary runs execute the
+artifact-local script and harness directly; the external workspace supplies
+the patched upstream `YCSB/` checkout, generated workload files, benchmark
+binaries, and models. For a new machine, install the three preserved
 directories at the workspace root, clone YCSB into `YCSB/`, check out the
 pinned revision, and apply `ycsb.patch`. YCSB uses Maven; build only the
 required RocksDB, OrientDB, and Elasticsearch bindings or build the complete
@@ -85,7 +88,15 @@ mvn clean package
 ```
 
 The harness creates fresh benchmark databases below its result directory.
-Set `AE_YCSB_ROOT` and, if needed, `AE_YCSB_RUNNER` to the installed workspace.
+Set `AE_YCSB_ROOT` to the installed workspace. Override `AE_YCSB_RUNNER` only
+when intentionally testing another harness copy.
+
+OrientDB 2.2.37 requires Java 8 on the supplied host; newer Java runtimes fail
+while opening the embedded `plocal` engine. Install a Java 8 runtime and set:
+
+```sh
+export AE_ORIENTDB_JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/jre
+```
 
 ### llama.cpp And Model
 
@@ -162,7 +173,10 @@ Caladan+ scheduler ports used as contextual comparison series. ARCAS and
 Caladan+ are built from the cSwitch source tree through feature-selected AE
 variants. The EEVDF port is an author-modified tree based on sched_ext commit
 `7298f797b83a105e74a8742355c58e3661f83091`; it is not claimed as an
-independent reproduction of upstream Linux EEVDF or its paper.
+independent reproduction of upstream Linux EEVDF or its paper. The v4 host
+tree includes a rustland dispatch-liveness fix validated by the Figure 10
+loaded File Server test; this comparison port remains a configured host input,
+not part of the cSwitch source snapshot.
 
 The public artifact's core claim is reproducible with the supplied host and
 its pinned ports. For cSwitch-only development without the EEVDF tree, set:

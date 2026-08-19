@@ -51,6 +51,12 @@ A fresh target is functionally successful when:
 returned nonzero. The logs and status record must be inspected, but the point
 counts as a successful repeat by design.
 
+For RocksDB, OrientDB, and Elasticsearch, successful parsing additionally
+requires harness group status `ok` and positive completed operations parsed
+from `instance_operation_summary.tsv`. Throughput is those actual operations
+divided by group wall time. A configured `operationcount`, a zero-throughput
+run, or a failed/partial group cannot produce a bar.
+
 ## Expected Trends
 
 Exact performance values are not pass/fail thresholds. They are sensitive to
@@ -84,7 +90,9 @@ find ae/results/latest -name status.json -exec grep -H '"status": "failed"' {} +
 ```
 
 Each attempt directory preserves `command.txt`, `config.json`, launcher logs,
-workload logs, and `status.json`. Zero, negative, and non-finite primary metrics
-do not count as successful attempts. A new top-level command starts a fresh
-campaign by default; use the printed `AE_OUT_ROOT=...` command to resume a
-specific campaign and consume later attempt slots for failed points.
+workload logs, `workload_diagnostics/`, and `status.json`. The diagnostics
+archive retains native workload logs and histograms even when regenerated
+database directories are pruned. Zero, negative, and non-finite primary
+metrics do not count as successful attempts. A new top-level command starts a
+fresh campaign by default; use the printed `AE_OUT_ROOT=...` command to resume
+a specific campaign and consume later attempt slots for failed points.

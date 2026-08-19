@@ -32,6 +32,7 @@ from .monitoring import (
     BenchmarkRunMetrics,
     ExternalRunMetrics,
     OperationMetrics,
+    PerfMetrics,
     merge_operation_metrics,
     operation_metrics_from_samples,
     parse_external_run_log,
@@ -214,9 +215,18 @@ def validate_config(config: HarnessConfig, enforce_runtime_requirements: bool = 
     missing = [name for name in required if not command_exists(name)]
     if missing:
         raise RuntimeError(f"missing required commands: {', '.join(missing)}")
-    resolve_perf_binary()
-    if not Path("/usr/bin/time").exists():
-        raise RuntimeError("missing required command: /usr/bin/time")
+    if config.monitoring.perf_enabled:
+        resolve_perf_binary()
+        if not Path("/usr/bin/time").exists():
+            raise RuntimeError("missing required command: /usr/bin/time")
+    for backend, adapter in zip(config.backends, adapters):
+        java_home = backend.env.get("JAVA_HOME")
+        if adapter.requires_ycsb_launcher and java_home:
+            java_binary = Path(java_home) / "bin" / "java"
+            if not java_binary.is_file() or not os.access(java_binary, os.X_OK):
+                raise RuntimeError(
+                    f"backend {backend.name} has unusable JAVA_HOME: {java_home}"
+                )
     if any(adapter.requires_ycsb_launcher for adapter in adapters) and not (
         config.ycsb_root / "bin" / "ycsb.sh"
     ).exists():
@@ -322,11 +332,13 @@ def build_perf_prefix(
     time_file: Path | None,
     perf_file: Path | None,
 ) -> list[str]:
-    perf_binary = resolve_perf_binary()
     command: list[str] = []
     if membind_selector is not None:
         command.extend(["numactl", "--membind", membind_selector])
     command.extend(["taskset", "-c", cpu_selector])
+    if not config.monitoring.perf_enabled:
+        return command
+    perf_binary = resolve_perf_binary()
     if time_file is not None and perf_file is not None:
         command.extend(
             [
@@ -363,6 +375,36 @@ def build_perf_prefix(
     return command
 
 
+def perf_metrics_are_required_and_missing(config: HarnessConfig, perf_metrics: PerfMetrics) -> bool:
+    return config.monitoring.perf_enabled and (
+        perf_metrics.stall_cycles is None or perf_metrics.cycles is None
+    )
+
+
+def completed_ycsb_operations(operations: dict[str, OperationMetrics]) -> int | None:
+    values = [
+        metrics.operations
+        for operation, metrics in operations.items()
+        if "FAILED" not in operation.upper()
+        and operation.upper() != "CLEANUP"
+        and metrics.operations is not None
+        and metrics.operations > 0
+    ]
+    return int(sum(values)) if values else None
+
+
+def failed_ycsb_operations(operations: dict[str, OperationMetrics]) -> int:
+    return int(
+        sum(
+            metrics.operations
+            for operation, metrics in operations.items()
+            if "FAILED" in operation.upper()
+            and metrics.operations is not None
+            and metrics.operations > 0
+        )
+    )
+
+
 def build_command(
     config: HarnessConfig,
     invocation: YcsbInvocation,
@@ -373,6 +415,7 @@ def build_command(
     perf_file: Path | None,
     hdr_dir: Path | None,
     active_processor_count: int,
+    backend_env: dict[str, str],
 ) -> tuple[list[str], dict[str, str]]:
     props = dict(invocation.extra_props)
     if phase == "run":
@@ -407,6 +450,7 @@ def build_command(
     command.extend(["-threads", str(invocation.threads)])
 
     env = os.environ.copy()
+    env.update(backend_env)
     java_opts = merged_java_opts(active_processor_count, invocation.java_opts)
     if java_opts:
         env["JAVA_OPTS"] = java_opts
@@ -1081,7 +1125,11 @@ def run_openmp_group(
         group_status = "run_failed"
     elif benchmark_metrics.verification_ok is False:
         group_status = "verification_failed"
-    elif benchmark_metrics.rate_value is None or perf_metrics.stall_cycles is None or perf_metrics.cycles is None:
+    elif (
+        benchmark_metrics.rate_value is None
+        or benchmark_metrics.rate_value <= 0.0
+        or perf_metrics_are_required_and_missing(config, perf_metrics)
+    ):
         group_status = "parse_failed"
     if group_status == "ok" and df_error is not None:
         group_status = "df_failed"
@@ -1344,8 +1392,8 @@ def run_external_per_instance_group(
             instance_status = "verification_failed"
         elif (
             external_metrics.throughput_ops_per_sec is None
-            or perf_metrics.stall_cycles is None
-            or perf_metrics.cycles is None
+            or external_metrics.throughput_ops_per_sec <= 0.0
+            or perf_metrics_are_required_and_missing(config, perf_metrics)
         ):
             instance_status = "parse_failed"
         if instance_status != "ok" and group_status == "ok":
@@ -1745,6 +1793,7 @@ def run_group(
                 perf_file=None,
                 hdr_dir=None,
                 active_processor_count=backend_config.java_active_processor_count,
+                backend_env=backend_config.env,
             )
             load_processes.append(
                 launch_process(command, env, artifacts.load_stdout_log, artifacts.load_stderr_log)
@@ -1754,7 +1803,18 @@ def run_group(
         if load_noise_process is not None:
             stop_process(load_noise_process)
 
-    if any(code != 0 for code in load_exit_codes):
+    load_operation_counts: list[int | None] = []
+    load_failed_operation_counts: list[int] = []
+    for artifacts, _, _ in invocations:
+        _, load_operations = parse_ycsb_run_log(artifacts.load_stdout_log)
+        load_operation_counts.append(completed_ycsb_operations(load_operations))
+        load_failed_operation_counts.append(failed_ycsb_operations(load_operations))
+
+    load_failed = any(code != 0 for code in load_exit_codes) or any(
+        count != base_recordcount or failed_count > 0
+        for count, failed_count in zip(load_operation_counts, load_failed_operation_counts)
+    )
+    if load_failed:
         status = "load_failed"
         for artifacts, _, _ in invocations:
             writers["instance"].writerow(
@@ -1882,6 +1942,7 @@ def run_group(
                 perf_file=artifacts.perf_file,
                 hdr_dir=artifacts.hdr_dir,
                 active_processor_count=backend_config.java_active_processor_count,
+                backend_env=backend_config.env,
             )
             run_processes.append(
                 launch_process(command, env, artifacts.run_stdout_log, artifacts.run_stderr_log)
@@ -1912,16 +1973,26 @@ def run_group(
     llc_load_values: list[int | None] = []
     llc_miss_values: list[int | None] = []
     parsed_ops_per_instance: list[dict[str, OperationMetrics]] = []
+    completed_ops_per_instance: list[int | None] = []
     instance_statuses: list[str] = []
 
     for idx, (artifacts, _, _) in enumerate(invocations):
         perf_metrics = parse_perf_metrics(artifacts.perf_file, artifacts.time_file, config.monitoring.perf_event)
         throughput, operations = parse_ycsb_run_log(artifacts.run_stdout_log)
         parsed_ops_per_instance.append(operations)
+        completed_operations = completed_ycsb_operations(operations)
+        failed_operations = failed_ycsb_operations(operations)
+        completed_ops_per_instance.append(completed_operations)
         instance_status = "ok"
         if run_exit_codes[idx] != 0:
             instance_status = "run_failed"
-        elif throughput is None or perf_metrics.stall_cycles is None or perf_metrics.cycles is None:
+        elif (
+            throughput is None
+            or throughput <= 0.0
+            or completed_operations is None
+            or failed_operations > 0
+            or perf_metrics_are_required_and_missing(config, perf_metrics)
+        ):
             instance_status = "parse_failed"
         if instance_status != "ok" and group_status == "ok":
             group_status = instance_status
@@ -2091,7 +2162,12 @@ def run_group(
         summed_instructions = sum_optional_ints(instruction_values)
         summed_task_clock_ms = sum_optional_floats(task_values)
         summed_throughput = sum_optional_floats(throughput_values)
-        aggregate_wall_throughput = throughput_from_wall_ms(total_operationcount, group_wall_ms)
+        completed_operationcount = sum_optional_ints(completed_ops_per_instance)
+        aggregate_wall_throughput = (
+            throughput_from_wall_ms(completed_operationcount, group_wall_ms)
+            if completed_operationcount is not None and completed_operationcount > 0
+            else None
+        )
         summed_user_time = sum_optional_floats(user_values)
         summed_kernel_time = sum_optional_floats(kernel_values)
         summed_cache_refs = sum_optional_ints(cache_ref_values)
@@ -2188,12 +2264,14 @@ def run_group(
 
 def run_harness(config: HarnessConfig) -> int:
     validate_config(config)
-    perf_binary = resolve_perf_binary()
     host = subprocess.run(["hostname", "-s"], check=True, capture_output=True, text=True).stdout.strip()
     arch = detect_arch()
     perf_scope = perf_scope_label()
     workload_props = {} if config.workload is None else load_workload_properties(config.workload.file)
-    log(f"using perf binary: {perf_binary}")
+    if config.monitoring.perf_enabled:
+        log(f"using perf binary: {resolve_perf_binary()}")
+    else:
+        log("performance counters disabled")
 
     run_dir = config.result_root / f"{config.result_prefix}_{host}_{now_utc_compact()}_{os.getpid()}"
     run_dir.mkdir(parents=True, exist_ok=False)

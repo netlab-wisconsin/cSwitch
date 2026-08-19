@@ -1,7 +1,7 @@
 # cSwitch SOSP 2026 Artifact Evaluation
 
 The top-level `README.md` and `reproduce.sh` are the evaluator entry point for
-cSwitch. The frozen `sosp26-ae-v3` release keeps the artifact implementation
+cSwitch. The frozen `sosp26-ae-v4` release keeps the artifact implementation
 separate from the scheduler source directories and uses the standalone
 `ae/harness.py`; historical `eval/exp*` runners are not invoked.
 
@@ -182,10 +182,13 @@ lighter to operate:
 - `AE_SCHEDULER_LOGS=0`: do not pass `--decision-log-path`,
   `--runtime-log-path`, or `--monitor`.
 - `AE_KEEP_HEAVY_WORKLOAD_ARTIFACTS=0`: after each run records its status and
-  summary inputs, prune regenerated benchmark database/workload directories
-  under `harness_results/*/runs/*/workload` to keep full runs bounded in disk
-  usage. When `AE_USE_SUDO=1`, root-owned workload files are removed through a
-  `sudo -n rm -rf` fallback.
+  summary inputs, copy workload logs and histogram files to
+  `workload_diagnostics/`, then prune regenerated benchmark database/workload
+  directories under `harness_results/*/runs/*/workload` to keep full runs
+  bounded in disk usage. When `AE_USE_SUDO=1`, root-owned workload files are
+  removed through a `sudo -n rm -rf` fallback.
+- The primary chiplet/YCSB runner disables per-instance `perf stat` and
+  `/usr/bin/time`; paper metrics come from each benchmark's native output.
 - No AE command uses `perf sched` by default.
 
 For slower diagnostic runs, set `AE_LIGHT_BUILD=0`, increase `AE_REPEATS`, and
@@ -206,6 +209,16 @@ Figure 10 defaults to four variants (`paper-greedy`, `arcas`, `eevdf`,
 
 The Fig10 `loaded` case uses workload CPUs `0-4,7-11,21-25,28-32`, sidecar
 noise CPUs `5-6,12-13,26-27,33-34`, and `AE_FIG10_NOISE_RATE=50` by default.
+For the `Nx1` workloads, all N instances receive the complete workload CPU
+mask and may migrate within it. The clean case launches 28 instances over the
+28-CPU mask; the loaded case launches 20 instances over the 20-CPU mask.
+
+RocksDB, OrientDB, and Elasticsearch throughput is accepted only when the
+YCSB group status is `ok` and the per-instance logs contain positive completed
+operations. The aggregate is recomputed from those parsed operations and the
+group wall time. The load phase must also report the expected number of
+successful INSERT operations. OrientDB 2.2.37 runs with the Java 8 runtime
+selected by `AE_ORIENTDB_JAVA_HOME`.
 
 Figure 11 defaults to the paper workload set (`llamacpp_llama31_8b`,
 `gapbs_pr_kron20`, and `filebench_fileserver`), four variants
@@ -248,8 +261,10 @@ asymmetric sidecar traffic on `0-3,7-10,21-24,28-31,42,49,63,70`.
   `$AE_GAPBS_ROOT/benchmark/graphs`.
 - `AE_YCSB_ROOT`: YCSB AE workspace containing scripts, workloads, and
   benchmark adapters, default `/home/seunghyun/ycsb`.
-- `AE_YCSB_RUNNER`: YCSB harness entry point, default
-  `$AE_YCSB_ROOT/scripts/run_chiplet_ycsb_harness.py`.
+- `AE_YCSB_RUNNER`: YCSB harness entry point, default the artifact-local
+  `motivation/original/ycsb/scripts/run_chiplet_ycsb_harness.py`.
+- `AE_ORIENTDB_JAVA_HOME`: Java 8 runtime used for OrientDB 2.2.37, default
+  `/usr/lib/jvm/java-8-openjdk-amd64/jre`.
 - `AE_EEVDF_ROOT`: EEVDF scheduler checkout, default
   `/home/seunghyun/scx_rustland_eevdf`.
 - `AE_EXP3_ROOT`: exp3 workspace, default `/home/seunghyun/exp3`.

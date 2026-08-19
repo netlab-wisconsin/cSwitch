@@ -7,14 +7,14 @@ command below from the repository root.
 
 The `main` branch contains scheduler source only. The `artifact-evaluation`
 branch adds the evaluation harness, frozen motivation inputs, and plotting
-code. The frozen AEC release is `sosp26-ae-v3`; `./reproduce.sh check` verifies
+code. The frozen AEC release is `sosp26-ae-v4`; `./reproduce.sh check` verifies
 that the checkout matches this tag and the pinned scheduler source.
 
 For a public checkout, clone the release directly into a directory named
 `ae`. Do not switch to a mutable branch afterward:
 
 ```sh
-git clone --branch sosp26-ae-v3 --depth 1 \
+git clone --branch sosp26-ae-v4 --depth 1 \
   https://github.com/netlab-wisconsin/cSwitch.git ae
 cd ae
 ```
@@ -48,7 +48,9 @@ host and must not run concurrently with another performance experiment:
 `AE_MAX_ATTEMPTS=3` preserves up to three attempt slots for a failed point
 while requiring one successful round. Non-finite, zero, and negative primary
 metrics are failures and consume an attempt slot instead of satisfying the
-success target. See
+success target. YCSB points additionally require an `ok` harness group and a
+positive count of operations parsed from the run output; configured operation
+counts are never used to synthesize throughput. See
 [`docs/EXPECTED_RESULTS.md`](docs/EXPECTED_RESULTS.md) for per-figure runtime,
 storage, outputs, and qualitative success criteria.
 
@@ -225,6 +227,7 @@ The author-machine locations are defaults and can be overridden, for example:
 ```sh
 AE_GAPBS_ROOT=/opt/gapbs \
 AE_YCSB_ROOT=/opt/cswitch-ycsb \
+AE_ORIENTDB_JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/jre \
 AE_MEMORY_BENCHMARK=/opt/bin/memory_benchmark \
 ./reproduce.sh fig12 dry-run
 ```

@@ -6,6 +6,7 @@ AE_DIR="$PACKAGE_ROOT/ae"
 SCHEDULER_ROOT="${AE_SCHEDULER_ROOT:-$PACKAGE_ROOT}"
 GAPBS_ROOT="${AE_GAPBS_ROOT:-/home/seunghyun/gapbs/gapbs}"
 YCSB_ROOT="${AE_YCSB_ROOT:-/home/seunghyun/ycsb}"
+ORIENTDB_JAVA_HOME="${AE_ORIENTDB_JAVA_HOME:-/usr/lib/jvm/java-8-openjdk-amd64/jre}"
 EEVDF_ROOT="${AE_EEVDF_ROOT:-/home/seunghyun/scx_rustland_eevdf}"
 MACHINE_LOCK_PATH="${AE_MACHINE_LOCK:-/run/lock/cswitch-ae.lock}"
 STRICT=0
@@ -98,6 +99,7 @@ need_path "$GAPBS_ROOT/bc" "GAPBS Betweenness Centrality"
 need_path "$AE_DIR/templates/filebench_webserver_10s.f" "AE Filebench webserver template"
 need_path "$AE_DIR/templates/filebench_webproxy_10s.f" "AE Filebench webproxy template"
 need_path "$AE_DIR/templates/filebench_varmail_10s.f" "AE Filebench varmail template"
+need_path "$ORIENTDB_JAVA_HOME/bin/java" "OrientDB Java runtime"
 if [[ -n "${AE_MEMORY_BENCHMARK:-}" ]]; then
   optional_path "$AE_MEMORY_BENCHMARK" "memory_benchmark"
 else

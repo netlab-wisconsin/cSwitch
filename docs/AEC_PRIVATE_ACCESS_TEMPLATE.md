@@ -10,7 +10,7 @@ them through HotCRP or another AEC-approved anonymous communication channel.
 - Evaluator username: `<private>`
 - Account expiration: `<private>`
 - Artifact root after login: `~/ae`
-- Release tag: `sosp26-ae-v3`
+- Release tag: `sosp26-ae-v4`
 - Authentication: evaluator-provided, comment-free SSH public key
 - Privilege: passwordless `sudo -n` is enabled only as required by the artifact
 

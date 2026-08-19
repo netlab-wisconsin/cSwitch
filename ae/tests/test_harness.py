@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +86,128 @@ class MetricValidationTests(unittest.TestCase):
 
             rows = PLOT.read_aggregates(results_root, "fig10")
             self.assertEqual([row.benchmark for row in rows], ["valid"])
+
+    def test_ycsb_metric_uses_parsed_operations_instead_of_configured_aggregate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            result_dir = run_dir / "harness_results" / "odb"
+            result_dir.mkdir(parents=True)
+            with (result_dir / "group_summary.tsv").open(
+                "w", encoding="utf-8", newline=""
+            ) as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=(
+                        "status",
+                        "group_wall_clock_ms",
+                        "aggregate_wall_throughput_ops_per_sec",
+                    ),
+                    delimiter="\t",
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "status": "ok",
+                        "group_wall_clock_ms": "2000",
+                        "aggregate_wall_throughput_ops_per_sec": "999999",
+                    }
+                )
+            with (result_dir / "instance_operation_summary.tsv").open(
+                "w", encoding="utf-8", newline=""
+            ) as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=("instance_id", "operation", "operations"),
+                    delimiter="\t",
+                )
+                writer.writeheader()
+                writer.writerow({"instance_id": 0, "operation": "READ", "operations": 100})
+                writer.writerow({"instance_id": 1, "operation": "READ", "operations": 100})
+                writer.writerow({"instance_id": 1, "operation": "CLEANUP", "operations": 1})
+
+            spec = HARNESS.RunSpec(
+                "fig10", "ycsb_orientdb_256mib", "loaded", "paper-greedy", 28, 1
+            )
+            payload = HARNESS.parse_metric(run_dir, spec)
+            self.assertEqual(payload["metric_value"], 100.0)
+
+    def test_ycsb_metric_rejects_failed_group_with_bogus_aggregate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            run_dir = Path(temp_dir)
+            result_dir = run_dir / "harness_results" / "odb"
+            result_dir.mkdir(parents=True)
+            with (result_dir / "group_summary.tsv").open(
+                "w", encoding="utf-8", newline=""
+            ) as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=("status", "group_wall_clock_ms", "aggregate_wall_throughput_ops_per_sec"),
+                    delimiter="\t",
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "status": "latency_merge_failed",
+                        "group_wall_clock_ms": "1471",
+                        "aggregate_wall_throughput_ops_per_sec": "135936",
+                    }
+                )
+
+            spec = HARNESS.RunSpec(
+                "fig10", "ycsb_orientdb_256mib", "loaded", "eevdf", 28, 1
+            )
+            payload = HARNESS.parse_metric(run_dir, spec)
+            self.assertIsNone(payload["metric_value"])
+            self.assertIn("latency_merge_failed", payload["metric_error"])
+
+
+class Fig10AffinityTests(unittest.TestCase):
+    @staticmethod
+    def args() -> SimpleNamespace:
+        return SimpleNamespace(
+            fig10_loaded_workload_cpus="0-4,7-11,21-25,28-32",
+            workload_cpus="0-13,21-34",
+        )
+
+    def test_chiplet_instances_share_the_full_loaded_cpu_mask(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec = HARNESS.RunSpec(
+                "fig10", "filebench_fileserver", "loaded", "paper-greedy", 28, 1
+            )
+            path = HARNESS.write_chiplet_harness_config(spec, self.args(), Path(temp_dir))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            assignment = payload["assignments"][0]
+            self.assertEqual(assignment["metadata"]["instance_count"], 20)
+            self.assertEqual(
+                assignment["metadata"]["shared_cpu_selector"],
+                "0-4,7-11,21-25,28-32",
+            )
+            self.assertFalse(payload["monitoring"]["perf_enabled"])
+
+    def test_orientdb_uses_configured_java_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec = HARNESS.RunSpec(
+                "fig10", "ycsb_orientdb_256mib", "clean", "paper-greedy", 28, 1
+            )
+            path = HARNESS.write_chiplet_harness_config(spec, self.args(), Path(temp_dir))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                payload["backends"][0]["env"]["JAVA_HOME"],
+                str(HARNESS.ORIENTDB_JAVA_HOME),
+            )
+
+    def test_external_instances_share_the_full_loaded_cpu_mask(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec = HARNESS.RunSpec(
+                "fig10", "gapbs_bc_kron20_twitter", "loaded", "paper-greedy", 28, 1
+            )
+            path = HARNESS.write_external_workload_config(spec, self.args(), Path(temp_dir))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["instance_count"], 20)
+            self.assertEqual(
+                payload["shared_workload_cpu_mask"],
+                "0-4,7-11,21-25,28-32",
+            )
 
 
 if __name__ == "__main__":

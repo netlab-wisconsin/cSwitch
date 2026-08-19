@@ -88,6 +88,7 @@ class AssignmentGenerator:
 class MonitoringConfig:
     event_name: str = "NO_RETIRED_INST_CYCLES"
     perf_event: str = "cpu/event=0xc0,cmask=1,inv=1/"
+    perf_enabled: bool = True
     df_enabled: bool = True
     df_resource_family: str = "CCM"
     df_resource_ids: tuple[int, ...] = (0, 1, 2, 3, 4, 5, 6, 7)
@@ -330,6 +331,7 @@ def load_config(config_path: Path) -> HarnessConfig:
         perf_event=str(
             monitoring_raw.get("perf_event", "cpu/event=0xc0,cmask=1,inv=1/")
         ),
+        perf_enabled=bool(monitoring_raw.get("perf_enabled", True)),
         df_enabled=bool(monitoring_raw.get("df_enabled", True)),
         df_resource_family=df_resource_family,
         df_resource_ids=_parse_int_list(
@@ -423,6 +425,7 @@ def config_to_dict(config: HarnessConfig) -> dict[str, Any]:
         "monitoring": {
             "event_name": config.monitoring.event_name,
             "perf_event": config.monitoring.perf_event,
+            "perf_enabled": config.monitoring.perf_enabled,
             "df_enabled": config.monitoring.df_enabled,
             "df_resource_family": config.monitoring.df_resource_family,
             "df_resource_ids": list(config.monitoring.df_resource_ids),

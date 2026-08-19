@@ -35,7 +35,9 @@ Common env:
   AE_GAPBS_ROOT       GAPBS checkout, default /home/seunghyun/gapbs/gapbs
   AE_GAPBS_GRAPH_ROOT GAPBS graphs, default below AE_GAPBS_ROOT
   AE_YCSB_ROOT        YCSB AE workspace, default /home/seunghyun/ycsb
-  AE_YCSB_RUNNER      YCSB harness, default below AE_YCSB_ROOT
+  AE_YCSB_RUNNER      YCSB harness, default to the artifact-local runner
+  AE_ORIENTDB_JAVA_HOME
+                      Java 8 runtime used by OrientDB 2.2.37
   AE_EEVDF_ROOT       EEVDF checkout, default /home/seunghyun/scx_rustland_eevdf
   AE_EXP3_ROOT        exp3 workspace, default /home/seunghyun/exp3
   AE_NODE_REPLICATION_ROOT
