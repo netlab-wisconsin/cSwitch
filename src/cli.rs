@@ -197,6 +197,10 @@ pub struct Opts {
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set, num_args = 1)]
     pub guard_clean_cgroup: bool,
 
+    /// Keep launched descendants in the managed cgroup.
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set, num_args = 1)]
+    pub adopt_workload_descendants: bool,
+
     #[cfg(feature = "diagnostics")]
     #[arg(long)]
     pub decision_log_path: Option<String>,

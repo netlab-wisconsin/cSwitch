@@ -707,12 +707,16 @@ pub fn run() -> Result<()> {
         }
     }
 
-    let mut adopters = workloads
-        .iter()
-        .map(|workload| {
-            WorkloadAdopter::new(workload.child.id(), cgroup_path.clone(), opts.verbose)
-        })
-        .collect::<Vec<_>>();
+    let mut adopters = if opts.adopt_workload_descendants {
+        workloads
+            .iter()
+            .map(|workload| {
+                WorkloadAdopter::new(workload.child.id(), cgroup_path.clone(), opts.verbose)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
 
     let mut llc_states = vec![None; topo.domains.len()];
     let mut df_states = vec![None; topo.domains.len()];
