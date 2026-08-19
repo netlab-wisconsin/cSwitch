@@ -47,6 +47,7 @@ from .monitoring import (
 
 
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+SCHED_EXT = 7
 
 
 @dataclass
@@ -405,6 +406,37 @@ def failed_ycsb_operations(operations: dict[str, OperationMetrics]) -> int:
     )
 
 
+def move_current_process_to_cgroup(cgroup: Path) -> None:
+    procs = cgroup / "cgroup.procs"
+    if not procs.is_file():
+        raise RuntimeError(f"cgroup process file is unavailable: {procs}")
+    procs.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
+
+
+def prepare_cgroup_java_home(
+    wrapper_root: Path,
+    real_java: Path,
+    workload_cgroup: Path,
+) -> Path:
+    wrapper_java = wrapper_root / "bin" / "java"
+    wrapper_java.parent.mkdir(parents=True, exist_ok=True)
+    wrapper_java.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import sys\n"
+        f"cgroup_procs = {str(workload_cgroup / 'cgroup.procs')!r}\n"
+        f"real_java = {str(real_java)!r}\n"
+        "with open(cgroup_procs, 'w', encoding='ascii') as handle:\n"
+        "    handle.write(f'{os.getpid()}\\n')\n"
+        f"os.sched_setscheduler(0, {SCHED_EXT}, os.sched_param(0))\n"
+        "os.execv(real_java, [real_java, *sys.argv[1:]])\n",
+        encoding="utf-8",
+    )
+    wrapper_java.chmod(0o755)
+    return wrapper_root
+
+
 def build_command(
     config: HarnessConfig,
     invocation: YcsbInvocation,
@@ -451,6 +483,23 @@ def build_command(
 
     env = os.environ.copy()
     env.update(backend_env)
+    if phase == "run" and config.workload_cgroup is not None:
+        configured_java = env.get("JAVA_HOME")
+        java_binary = (
+            Path(configured_java) / "bin" / "java"
+            if configured_java
+            else Path(shutil.which("java") or "")
+        )
+        if not java_binary.is_file() or not os.access(java_binary, os.X_OK):
+            raise RuntimeError(f"unable to wrap Java executable: {java_binary}")
+        assert hdr_dir is not None
+        env["JAVA_HOME"] = str(
+            prepare_cgroup_java_home(
+                hdr_dir.parent / "java-home",
+                java_binary,
+                config.workload_cgroup,
+            )
+        )
     java_opts = merged_java_opts(active_processor_count, invocation.java_opts)
     if java_opts:
         env["JAVA_OPTS"] = java_opts
@@ -2264,6 +2313,9 @@ def run_group(
 
 def run_harness(config: HarnessConfig) -> int:
     validate_config(config)
+    if config.setup_cgroup is not None:
+        move_current_process_to_cgroup(config.setup_cgroup)
+        log(f"moved harness setup to cgroup: {config.setup_cgroup}")
     host = subprocess.run(["hostname", "-s"], check=True, capture_output=True, text=True).stdout.strip()
     arch = detect_arch()
     perf_scope = perf_scope_label()

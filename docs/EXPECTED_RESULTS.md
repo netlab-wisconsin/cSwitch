@@ -57,6 +57,12 @@ from `instance_operation_summary.tsv`. Throughput is those actual operations
 divided by group wall time. A configured `operationcount`, a zero-throughput
 run, or a failed/partial group cannot produce a bar.
 
+YCSB database preparation is setup, not part of the paper throughput metric.
+On partial-cgroup scheduler variants, shell discovery helpers and database load
+remain in the root cgroup under `SCHED_OTHER`. Only run-phase Java processes
+enter the managed experiment cgroup and explicitly switch to `SCHED_EXT`. The
+generated `resolved_config.json` records both cgroup paths.
+
 ## Expected Trends
 
 Exact performance values are not pass/fail thresholds. They are sensitive to

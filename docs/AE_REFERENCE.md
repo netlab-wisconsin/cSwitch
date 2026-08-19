@@ -1,7 +1,7 @@
 # cSwitch SOSP 2026 Artifact Evaluation
 
 The top-level `README.md` and `reproduce.sh` are the evaluator entry point for
-cSwitch. The frozen `sosp26-ae-v4` release keeps the artifact implementation
+cSwitch. The frozen `sosp26-ae-v5` release keeps the artifact implementation
 separate from the scheduler source directories and uses the standalone
 `ae/harness.py`; historical `eval/exp*` runners are not invoked.
 
@@ -219,6 +219,14 @@ operations. The aggregate is recomputed from those parsed operations and the
 group wall time. The load phase must also report the expected number of
 successful INSERT operations. OrientDB 2.2.37 runs with the Java 8 runtime
 selected by `AE_ORIENTDB_JAVA_HOME`.
+
+For cSwitch, ARCAS, and Caladan+ YCSB points, harness setup and database load
+run in the root cgroup under `SCHED_OTHER`. The run-phase Java process enters
+the experiment's managed cgroup and explicitly switches to `SCHED_EXT`
+immediately before `exec`. This keeps YCSB shell discovery helpers and database
+preparation outside the measured scheduler workload while preserving the
+configured CPU mask and placing every measured Java task under the selected
+scheduler. CFS and global EEVDF runs do not use this cgroup split.
 
 Figure 11 defaults to the paper workload set (`llamacpp_llama31_8b`,
 `gapbs_pr_kron20`, and `filebench_fileserver`), four variants

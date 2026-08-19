@@ -173,8 +173,8 @@ Caladan+ scheduler ports used as contextual comparison series. ARCAS and
 Caladan+ are built from the cSwitch source tree through feature-selected AE
 variants. The EEVDF port is an author-modified tree based on sched_ext commit
 `7298f797b83a105e74a8742355c58e3661f83091`; it is not claimed as an
-independent reproduction of upstream Linux EEVDF or its paper. The v4 host
-tree includes a rustland dispatch-liveness fix validated by the Figure 10
+independent reproduction of upstream Linux EEVDF or its paper. The supplied
+host tree includes a rustland dispatch-liveness fix validated by the Figure 10
 loaded File Server test; this comparison port remains a configured host input,
 not part of the cSwitch source snapshot.
 

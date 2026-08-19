@@ -7,14 +7,14 @@ command below from the repository root.
 
 The `main` branch contains scheduler source only. The `artifact-evaluation`
 branch adds the evaluation harness, frozen motivation inputs, and plotting
-code. The frozen AEC release is `sosp26-ae-v4`; `./reproduce.sh check` verifies
+code. The frozen AEC release is `sosp26-ae-v5`; `./reproduce.sh check` verifies
 that the checkout matches this tag and the pinned scheduler source.
 
 For a public checkout, clone the release directly into a directory named
 `ae`. Do not switch to a mutable branch afterward:
 
 ```sh
-git clone --branch sosp26-ae-v4 --depth 1 \
+git clone --branch sosp26-ae-v5 --depth 1 \
   https://github.com/netlab-wisconsin/cSwitch.git ae
 cd ae
 ```

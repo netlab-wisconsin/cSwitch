@@ -140,6 +140,8 @@ class HarnessConfig:
     fail_fast: bool
     workload: WorkloadConfig | None
     monitoring: MonitoringConfig
+    setup_cgroup: Path | None
+    workload_cgroup: Path | None
     background_noise: BackgroundNoiseConfig | None
     backends: tuple[BackendConfig, ...]
     assignments: tuple[Assignment, ...]
@@ -341,6 +343,19 @@ def load_config(config_path: Path) -> HarnessConfig:
         or default_df_resource_ids,
         df_sample_slot_ms=int(monitoring_raw.get("df_sample_slot_ms", 20)),
     )
+    execution_cgroups_raw = (
+        raw.get("execution_cgroups") if isinstance(raw.get("execution_cgroups"), dict) else {}
+    )
+    setup_cgroup = (
+        None
+        if execution_cgroups_raw.get("setup") is None
+        else _resolve_path(base_dir, execution_cgroups_raw.get("setup"))
+    )
+    workload_cgroup = (
+        None
+        if execution_cgroups_raw.get("workload") is None
+        else _resolve_path(base_dir, execution_cgroups_raw.get("workload"))
+    )
     background_noise = _parse_background_noise(
         base_dir,
         raw.get("background_noise") if isinstance(raw.get("background_noise"), dict) else None,
@@ -398,6 +413,8 @@ def load_config(config_path: Path) -> HarnessConfig:
         fail_fast=bool(raw.get("fail_fast", True)),
         workload=workload,
         monitoring=monitoring,
+        setup_cgroup=setup_cgroup,
+        workload_cgroup=workload_cgroup,
         background_noise=background_noise,
         backends=backends,
         assignments=tuple(assignments),
@@ -430,6 +447,10 @@ def config_to_dict(config: HarnessConfig) -> dict[str, Any]:
             "df_resource_family": config.monitoring.df_resource_family,
             "df_resource_ids": list(config.monitoring.df_resource_ids),
             "df_sample_slot_ms": config.monitoring.df_sample_slot_ms,
+        },
+        "execution_cgroups": {
+            "setup": None if config.setup_cgroup is None else str(config.setup_cgroup),
+            "workload": None if config.workload_cgroup is None else str(config.workload_cgroup),
         },
         "background_noise": (
             None

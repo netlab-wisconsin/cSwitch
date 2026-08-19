@@ -11,6 +11,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from motivation.original.ycsb.chiplet_harness import runner as CHIPLET_RUNNER
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -195,6 +197,33 @@ class Fig10AffinityTests(unittest.TestCase):
                 payload["backends"][0]["env"]["JAVA_HOME"],
                 str(HARNESS.ORIENTDB_JAVA_HOME),
             )
+            self.assertEqual(payload["execution_cgroups"]["setup"], "/sys/fs/cgroup")
+            self.assertEqual(
+                payload["execution_cgroups"]["workload"],
+                "/sys/fs/cgroup/scx-ae-ycsb_orientdb_256mib__clean__paper-greedy__t28__r01",
+            )
+
+    def test_filebench_does_not_leave_the_scheduler_cgroup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec = HARNESS.RunSpec(
+                "fig10", "filebench_fileserver", "clean", "paper-greedy", 28, 1
+            )
+            path = HARNESS.write_chiplet_harness_config(spec, self.args(), Path(temp_dir))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertNotIn("execution_cgroups", payload)
+
+    def test_java_cgroup_wrapper_executes_the_configured_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wrapper_home = CHIPLET_RUNNER.prepare_cgroup_java_home(
+                Path(temp_dir) / "java-home",
+                Path("/opt/java8/bin/java"),
+                Path("/sys/fs/cgroup/scx-ae-test"),
+            )
+            wrapper = (wrapper_home / "bin" / "java").read_text(encoding="utf-8")
+            self.assertIn("/sys/fs/cgroup/scx-ae-test/cgroup.procs", wrapper)
+            self.assertIn("os.sched_setscheduler(0, 7", wrapper)
+            self.assertIn("real_java = '/opt/java8/bin/java'", wrapper)
+            self.assertIn("os.execv(real_java", wrapper)
 
     def test_external_instances_share_the_full_loaded_cpu_mask(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

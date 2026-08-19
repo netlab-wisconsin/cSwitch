@@ -6,7 +6,7 @@ into concrete artifact-package tasks.
 ## Available
 
 - Public repository: <https://github.com/netlab-wisconsin/cSwitch>, with the
-  evaluator tree pinned by tag `sosp26-ae-v4`. Archive the tagged release on a
+  evaluator tree pinned by tag `sosp26-ae-v5`. Archive the tagged release on a
   long-term service such as Zenodo when the final public version is ready.
 - License: the scheduler and author material use GPL-2.0-only. Third-party
   provenance and licensing boundaries are recorded in `LICENSES.md`,
@@ -66,7 +66,8 @@ into concrete artifact-package tasks.
     four Filebench workloads.
   - Figure 10 `Nx1` instances share the complete clean or loaded CPU mask so
     scheduler migration remains possible; YCSB results require actual parsed
-    operations and OrientDB is pinned to Java 8.
+    operations and OrientDB is pinned to Java 8. YCSB setup/load stays outside
+    partial scheduler cgroups; run-phase Java processes are measured inside.
   - Figure 11 defaults to llama.cpp, PageRank, and File Server under both
     heterogeneous free-core and busy-core asymmetric-noise cases.
   - Figure 12a and 12b use distinct paper launch shapes for compute-I/O link

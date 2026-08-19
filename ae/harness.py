@@ -617,6 +617,11 @@ def uses_shared_instance_affinity(spec: RunSpec) -> bool:
     return spec.figure == "fig10" and workload_style(spec) != "1x28"
 
 
+def managed_cgroup_path(spec: RunSpec) -> Path:
+    name = "scx-ae-" + re.sub(r"[^a-zA-Z0-9_.-]+", "-", spec.run_id)[:180]
+    return Path("/sys/fs/cgroup") / name
+
+
 def generic_noise_profile(spec: RunSpec, args: argparse.Namespace) -> NoiseProfile | None:
     if spec.figure == "fig10" and spec.case != "clean":
         cpus = cpus_from_mask(args.fig10_noise_cpus)
@@ -1102,6 +1107,14 @@ def write_chiplet_harness_config(spec: RunSpec, args: argparse.Namespace, run_di
             }
         ],
     }
+    if workload.backend in {"rocksdb", "orientdb", "elasticsearch"} and spec.variant not in {
+        "cfs",
+        "eevdf",
+    }:
+        payload["execution_cgroups"] = {
+            "setup": "/sys/fs/cgroup",
+            "workload": str(managed_cgroup_path(spec)),
+        }
     if workload.workload_file is not None:
         payload["workload"] = {
             "file": str(workload.workload_file),
@@ -1387,11 +1400,10 @@ def scheduler_command(
     if spec.variant == "eevdf":
         command.extend(["--ccm-mapping-path", str(args.ccm_mapping_path), "--restrict-mapped-cpus", "true"])
     else:
-        cgroup_name = "scx-ae-" + re.sub(r"[^a-zA-Z0-9_.-]+", "-", spec.run_id)[:180]
         command.extend(
             [
                 "--cgroup-path",
-                str(Path("/sys/fs/cgroup") / cgroup_name),
+                str(managed_cgroup_path(spec)),
                 "--ccm-mapping-path",
                 str(args.ccm_mapping_path),
                 "--restrict-mapped-cpus",
@@ -1406,6 +1418,8 @@ def scheduler_command(
         )
     command.extend(variant.runtime_args)
     if is_local_scheduler_variant(spec.variant):
+        if WORKLOADS[spec.benchmark].backend in {"rocksdb", "orientdb", "elasticsearch"}:
+            command.extend(["--adopt-workload-descendants", "false"])
         command.extend(
             [
                 "--signature-snapshots",
@@ -1814,7 +1828,10 @@ def execute_spec(spec: RunSpec, args: argparse.Namespace, binary_paths: dict[str
     run_dir = out_dir / "runs" / spec.run_id
     run_dir_existed = run_dir.exists()
     if args.force and run_dir.exists():
-        shutil.rmtree(run_dir)
+        cleanup_processes_for_run(run_dir, spec.run_id, use_sudo=args.use_sudo)
+        if not remove_tree_best_effort(run_dir, use_sudo=args.use_sudo):
+            raise RuntimeError(f"could not remove existing run directory: {run_dir}")
+        run_dir_existed = False
     ensure_dir(run_dir)
     status_path = run_dir / "status.json"
     if run_dir_existed and not status_path.exists():
