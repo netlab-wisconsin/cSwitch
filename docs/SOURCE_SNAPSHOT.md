@@ -9,21 +9,22 @@ The evaluator release is the immutable tag named in `ae/ARTIFACT_RELEASE`
 current `HEAD` to match its commit before a fresh campaign starts. This release
 check is separate from the scheduler-source check below.
 
-`ae/SOURCE_COMMIT` records the paper scheduler base commit. Because evaluation
-commits change the branch HEAD, the wrappers compare scheduler-owned paths to
-that base rather than requiring `HEAD` to equal it. `ae/SOURCE_SHA256SUMS`
-provides the same verification for GitHub zip/tar source archives without Git
-history.
+`ae/SOURCE_COMMIT` records the scheduler-only commit used by this release.
+Because the following evaluation commit changes the branch HEAD, the wrappers
+compare scheduler-owned paths to that source commit rather than requiring
+`HEAD` to equal it. `ae/SOURCE_SHA256SUMS` provides the same verification for
+GitHub zip/tar source archives without Git history.
 
-The evaluation release adds the default-enabled
+That scheduler commit is based on paper source commit
+`c9560e5024b0d0fdfb2b0ad1f6731f1ffb1c5de6` and adds the default-enabled
 `--adopt-workload-descendants` launch-control option. Its default preserves the
 paper scheduler behavior. The AE harness disables automatic descendant
 adoption only for partial-cgroup YCSB runs, then explicitly admits each
 measured run-phase Java process after database setup. This does not change the
 scheduler placement policy.
 
-To use another scheduler clone, check out the paper source commit and provide
-its path:
+To use another scheduler clone, check out the pinned release source commit and
+provide its path:
 
 ```sh
 git -C /path/to/scx_rustland_la checkout "$(cat ae/SOURCE_COMMIT)"

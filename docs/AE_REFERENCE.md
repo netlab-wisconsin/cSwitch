@@ -5,9 +5,10 @@ cSwitch. The frozen `sosp26-ae-v5` release keeps the artifact implementation
 separate from the scheduler source directories and uses the standalone
 `ae/harness.py`; historical `eval/exp*` runners are not invoked.
 
-The scheduler source is at the repository root. Its paper base commit is
-recorded in `ae/SOURCE_COMMIT`; see `docs/SOURCE_SNAPSHOT.md` for snapshot
-verification and for using another checkout through `AE_SCHEDULER_ROOT`.
+The scheduler source is at the repository root. Its frozen evaluation commit
+is recorded in `ae/SOURCE_COMMIT`; see `docs/SOURCE_SNAPSHOT.md` for the paper
+base relationship, snapshot verification, and using another checkout through
+`AE_SCHEDULER_ROOT`.
 
 ## Scope
 

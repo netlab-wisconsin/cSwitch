@@ -26,15 +26,15 @@ source_paths=(
 
 if [[ -n "$observed_commit" ]] && git -C "$SCHEDULER_ROOT" cat-file -e "$expected_commit^{commit}" 2>/dev/null; then
   if git -C "$SCHEDULER_ROOT" diff --quiet "$expected_commit" -- "${source_paths[@]}"; then
-    printf 'scheduler source matches paper base %s (checkout %s)\n' \
+    printf 'scheduler source matches pinned commit %s (checkout %s)\n' \
       "$expected_commit" "$observed_commit"
     exit 0
   fi
   if [[ "${AE_ALLOW_SOURCE_MISMATCH:-0}" == "1" ]]; then
-    echo "warning: scheduler source differs from paper base $expected_commit" >&2
+    echo "warning: scheduler source differs from pinned commit $expected_commit" >&2
     exit 0
   fi
-  echo "scheduler source differs from paper base $expected_commit" >&2
+  echo "scheduler source differs from pinned commit $expected_commit" >&2
   git -C "$SCHEDULER_ROOT" diff --stat "$expected_commit" -- "${source_paths[@]}" >&2
   exit 1
 fi
@@ -43,13 +43,13 @@ if [[ -f "$checksum_file" ]] && (
   cd "$SCHEDULER_ROOT"
   sha256sum --check --status "$checksum_file"
 ); then
-  printf 'scheduler source matches paper base %s (SHA256 manifest)\n' "$expected_commit"
+  printf 'scheduler source matches pinned commit %s (SHA256 manifest)\n' "$expected_commit"
   exit 0
 fi
 
 if [[ "${AE_ALLOW_SOURCE_MISMATCH:-0}" == "1" ]]; then
-  echo "warning: scheduler source cannot be verified against paper base $expected_commit" >&2
+  echo "warning: scheduler source cannot be verified against pinned commit $expected_commit" >&2
   exit 0
 fi
-echo "scheduler source cannot be verified against paper base $expected_commit" >&2
+echo "scheduler source cannot be verified against pinned commit $expected_commit" >&2
 exit 1
