@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RESULTS_BASE="$ROOT_DIR/ae/results"
 
 # Group-writable outputs are sufficient for an administrator-managed checkout.
 # Evaluator-specific checkouts need no shared write permission.
@@ -69,6 +70,29 @@ acquire_machine_lock() {
       "the AE machine is busy; another campaign holds $MACHINE_LOCK_PATH"
   fi
   printf 'acquired AE machine lock: %s\n' "$MACHINE_LOCK_PATH"
+}
+
+prepare_campaign_output_root() {
+  if [[ -n "${AE_OUT_ROOT:-}" ]]; then
+    printf 'using explicit AE campaign root: %s\n' "$AE_OUT_ROOT"
+    return
+  fi
+
+  local campaign_id
+  campaign_id="$(date -u +%Y%m%dT%H%M%SZ)-${target}-${action}-$$"
+  export AE_OUT_ROOT="$RESULTS_BASE/campaigns/$campaign_id"
+  mkdir -p "$AE_OUT_ROOT"
+  ln -sfn "$AE_OUT_ROOT" "$RESULTS_BASE/latest"
+  printf 'created fresh AE campaign root: %s\n' "$AE_OUT_ROOT"
+  printf 'resume with: AE_OUT_ROOT=%q ./reproduce.sh %q %q\n' \
+    "$AE_OUT_ROOT" "$target" "$action"
+}
+
+select_plot_input_root() {
+  if [[ -z "${AE_OUT_ROOT:-}" && -d "$RESULTS_BASE/latest" ]]; then
+    export AE_OUT_ROOT="$RESULTS_BASE/latest"
+    printf 'plotting latest AE campaign: %s\n' "$(readlink -f "$AE_OUT_ROOT")"
+  fi
 }
 
 run_evaluation() {
@@ -216,11 +240,13 @@ case "$action" in
     ;;
   smoke)
     acquire_machine_lock
+    prepare_campaign_output_root
     "$ROOT_DIR/ae/check.sh"
     run_evaluation "$target" smoke
     ;;
   full)
     acquire_machine_lock
+    prepare_campaign_output_root
     export AE_REPEATS="${AE_REPEATS:-1}"
     export AE_MAX_ATTEMPTS="${AE_MAX_ATTEMPTS:-3}"
     "$ROOT_DIR/ae/check.sh"
@@ -228,6 +254,7 @@ case "$action" in
     render_evaluation "$target"
     ;;
   plot)
+    select_plot_input_root
     render_evaluation "$target"
     ;;
   "")

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -128,6 +129,9 @@ def read_aggregates(results_root: Path, figure: str) -> list[AggregateRow]:
         raw_value = row.get("median_metric_value", "").strip()
         if not raw_value:
             continue
+        value = float(raw_value)
+        if not math.isfinite(value) or value <= 0.0:
+            continue
         rows.append(
             AggregateRow(
                 benchmark=row["benchmark"],
@@ -135,7 +139,7 @@ def read_aggregates(results_root: Path, figure: str) -> list[AggregateRow]:
                 variant=result_variant_key(row["variant"]),
                 threads=int(row["threads"]),
                 noise_rate=int(row.get("noise_rate", "") or 0),
-                value=float(raw_value),
+                value=value,
             )
         )
     return rows

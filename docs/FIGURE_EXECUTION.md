@@ -148,13 +148,13 @@ and Caladan+ ports together. The core reproduction claim is interpreted from
 the cSwitch results; port results provide contextual comparisons and do not
 claim independent reproduction of their original systems.
 
-| Paper figure | Target | Execution command | Default result directory |
+| Paper figure | Target | Execution command | Campaign-relative result directory |
 | --- | --- | --- | --- |
-| 10 | `fig10` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig10` | `ae/results/fig10/` |
-| 11 | `fig11` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig11` | `ae/results/fig11/` |
-| 12a | `fig12a` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig12a` | `ae/results/fig12a/` |
-| 12b | `fig12b` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig12b` | `ae/results/fig12b/` |
-| 13 | `fig13` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig13` | `ae/results/fig13/` |
+| 10 | `fig10` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig10` | `<campaign>/fig10/` |
+| 11 | `fig11` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig11` | `<campaign>/fig11/` |
+| 12a | `fig12a` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig12a` | `<campaign>/fig12a/` |
+| 12b | `fig12b` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig12b` | `<campaign>/fig12b/` |
+| 13 | `fig13` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig13` | `<campaign>/fig13/` |
 
 Use the same target for command inspection or a short functional run:
 
@@ -169,9 +169,11 @@ Use the same target for command inspection or a short functional run:
 ```
 
 The default `full` action performs the summary and plot steps automatically.
-For advanced manual recovery from an existing result tree, use:
+Each fresh top-level run prints its campaign root. For advanced manual recovery
+from an existing result tree, export that root first:
 
 ```sh
+export AE_OUT_ROOT="$PWD/ae/results/campaigns/<campaign-id>"
 ae/summarize.sh fig10
 ae/summarize.sh fig11
 ae/summarize.sh fig12a
@@ -180,8 +182,8 @@ ae/summarize.sh fig13
 ae/plot.sh all
 ```
 
-`ae/plot.sh` reads only the AE-local summaries and writes PDF/PNG files and
-normalized plot data under `ae/results/figures/`.
+`ae/plot.sh` reads only the selected campaign's summaries and writes PDF/PNG
+files and normalized plot data under `<campaign>/figures/`.
 
 To render an independently reproduced Figure 12 result tree without requiring
 Figures 10, 11, and 13, run `ae/plot.sh fig12`.

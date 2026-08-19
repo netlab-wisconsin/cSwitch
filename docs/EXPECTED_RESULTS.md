@@ -41,9 +41,10 @@ A fresh target is functionally successful when:
 2. Each requested logical point has at least one `ok` or `salvaged` attempt and
    the aggregate table reports `success_count >= 1`.
 3. The target writes `raw_results.tsv`, `aggregate_results.tsv`, and
-   `summary.md` below `ae/results/<figure>/results/`.
+   `summary.md` below
+   `ae/results/campaigns/<campaign-id>/<figure>/results/`.
 4. The plotting stage creates the requested PDF and PNG under
-   `ae/results/figures/` and records unavailable comparison points in
+   the campaign's `figures/` directory and records unavailable comparison points in
    `missing_values.tsv` instead of fabricating values.
 
 `salvaged` means the primary metric was parsed successfully but wrapper cleanup
@@ -78,10 +79,12 @@ Their values are not independent reproduction claims for the original systems.
 Start with:
 
 ```sh
-find ae/results -name status.json -print
-find ae/results -name status.json -exec grep -H '"status": "failed"' {} +
+find ae/results/latest -name status.json -print
+find ae/results/latest -name status.json -exec grep -H '"status": "failed"' {} +
 ```
 
 Each attempt directory preserves `command.txt`, `config.json`, launcher logs,
-workload logs, and `status.json`. Repeating the same top-level command resumes
-successful points and consumes later attempt slots for failed points.
+workload logs, and `status.json`. Zero, negative, and non-finite primary metrics
+do not count as successful attempts. A new top-level command starts a fresh
+campaign by default; use the printed `AE_OUT_ROOT=...` command to resume a
+specific campaign and consume later attempt slots for failed points.

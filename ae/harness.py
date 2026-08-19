@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import shlex
@@ -1403,6 +1404,20 @@ def optional_float(value: Any) -> float | None:
         return None
 
 
+def usable_metric(value: Any) -> float | None:
+    parsed = optional_float(value)
+    if parsed is None or not math.isfinite(parsed) or parsed <= 0.0:
+        return None
+    return parsed
+
+
+def attempt_succeeded(status: MappingLike) -> bool:
+    return (
+        str(status.get("status", "")) in SUCCESS_STATUSES
+        and usable_metric(status.get("metric_value")) is not None
+    )
+
+
 def read_first_tsv_row(path: Path | None) -> dict[str, str] | None:
     if path is None or not path.exists():
         return None
@@ -1722,7 +1737,7 @@ def execute_spec(spec: RunSpec, args: argparse.Namespace, binary_paths: dict[str
         if args.mode == "dry-run":
             log(f"skip existing {spec.figure} {spec.run_id}")
             return status
-        if existing_status in SUCCESS_STATUSES:
+        if attempt_succeeded(status):
             log(f"skip existing {spec.figure} {spec.run_id}")
             return status
         if existing_status != "dry-run":
@@ -1789,6 +1804,13 @@ def execute_spec(spec: RunSpec, args: argparse.Namespace, binary_paths: dict[str
     metric_payload = parse_metric(run_dir, spec)
     metric_value = optional_float(metric_payload.get("metric_value"))
     metric_error = str(metric_payload.get("metric_error", ""))
+    if usable_metric(metric_value) is None and metric_value is not None:
+        metric_payload = dict(metric_payload)
+        metric_payload["invalid_metric_value"] = repr(metric_value)
+        metric_payload["metric_value"] = None
+        metric_error = f"primary metric must be finite and greater than zero; got {metric_value!r}"
+        metric_payload["metric_error"] = metric_error
+        metric_value = None
     if result["returncode"] == 0 and not result["timed_out"] and metric_value is not None:
         status = "ok"
     elif not result["timed_out"] and metric_value is not None:
@@ -1870,6 +1892,7 @@ def summarize_figure(figure: str, args: argparse.Namespace) -> None:
         "status",
         "metric_name",
         "metric_value",
+        "invalid_metric_value",
         "metric_unit",
         "higher_is_better",
         "group_status",
@@ -1889,7 +1912,7 @@ def summarize_figure(figure: str, args: argparse.Namespace) -> None:
 
     grouped: dict[tuple[str, str, str, int, int], list[MappingLike]] = {}
     for status in statuses:
-        if str(status.get("status", "")) not in SUCCESS_STATUSES:
+        if not attempt_succeeded(status):
             continue
         rate = int(status.get("noise_rate") or 0)
         key = (
@@ -2005,7 +2028,7 @@ def run_figure(figure: str, args: argparse.Namespace) -> None:
                 log(f"skip remaining attempts for {point_label(spec)}; target successes reached")
                 break
             status = execute_spec(spec, args, binary_paths)
-            if str(status.get("status", "")) in SUCCESS_STATUSES:
+            if attempt_succeeded(status):
                 successes += 1
         if args.mode != "dry-run" and successes < required_successes:
             log(

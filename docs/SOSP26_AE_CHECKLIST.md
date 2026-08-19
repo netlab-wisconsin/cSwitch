@@ -6,7 +6,7 @@ into concrete artifact-package tasks.
 ## Available
 
 - Public repository: <https://github.com/netlab-wisconsin/cSwitch>, with the
-  evaluator tree pinned by tag `sosp26-ae-v2`. Archive the tagged release on a
+  evaluator tree pinned by tag `sosp26-ae-v3`. Archive the tagged release on a
   long-term service such as Zenodo when the final public version is ready.
 - License: the scheduler and author material use GPL-2.0-only. Third-party
   provenance and licensing boundaries are recorded in `LICENSES.md`,
@@ -120,7 +120,8 @@ into concrete artifact-package tasks.
   - `ae/summarize.sh fig13`
 - Figure rendering:
   - `ae/plot.sh` renders `figure10.pdf` through `figure13.pdf` plus PNGs under
-    `ae/results/figures/`.
+    the selected campaign's `figures/` directory; `ae/results/latest` points
+    to the most recently started campaign.
   - Figure 10/11 use cSwitch normalization for this AE result set; missing
     measurements remain blank and are listed in `missing_values.tsv`.
 - Known scope notes to call out in the submission:

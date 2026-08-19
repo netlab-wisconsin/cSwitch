@@ -1,7 +1,7 @@
 # cSwitch SOSP 2026 Artifact Evaluation
 
 The top-level `README.md` and `reproduce.sh` are the evaluator entry point for
-cSwitch. The frozen `sosp26-ae-v2` release keeps the artifact implementation
+cSwitch. The frozen `sosp26-ae-v3` release keeps the artifact implementation
 separate from the scheduler source directories and uses the standalone
 `ae/harness.py`; historical `eval/exp*` runners are not invoked.
 
@@ -109,7 +109,8 @@ ae/plot.sh fig12
 ```
 
 The rendered PDF/PNG files, normalized plot inputs, and an exact list of blank
-values are written under `ae/results/figures/` by default.
+values are written under the selected campaign's `figures/` directory by
+default. For top-level fresh runs, `ae/results/latest` points to that campaign.
 
 Inspect or render the motivation figures separately:
 
@@ -327,8 +328,9 @@ AE-local Filebench templates are under `ae/templates/`. Do not route AE
 workload coverage through `eval/exp*`.
 
 Full and smoke runs treat `r01`, `r02`, ... as attempt slots. A logical point
-stops once it reaches `AE_REPEATS` successful runs, up to `AE_MAX_ATTEMPTS`
-slots. Failed attempt directories and their `status.json` files are preserved
+stops once it reaches `AE_REPEATS` successful runs with a finite primary metric
+greater than zero, up to `AE_MAX_ATTEMPTS` slots. Failed attempt directories
+and their `status.json` files are preserved
 for inspection/resume; rerun with `--force` only when intentionally replacing
 old attempt artifacts. If a workload metric was already parsed but wrapper
 cleanup exits non-zero, the attempt is marked `salvaged` and counts as a
@@ -340,10 +342,13 @@ filesystem. For sudo runs this pruning uses `sudo -n` when required by
 root-owned benchmark outputs.
 
 Pressing `Ctrl-C` terminates the active scheduler/workload process group and
-releases the top-level wrapper's machine lock. Repeating the same command skips
-successful points and continues failed or unfinished points. Use a new
-`AE_OUT_ROOT` for an independent campaign rather than mixing it with an older
-result tree.
+releases the top-level wrapper's machine lock. When `AE_OUT_ROOT` is unset,
+each top-level full or smoke command creates a timestamped directory below
+`ae/results/campaigns/` and updates `ae/results/latest`. This prevents a second
+evaluator from silently reusing another evaluator's measurements. To resume,
+rerun the printed command with the same explicit `AE_OUT_ROOT`; successful
+points are then skipped and failed or unfinished points continue in later
+attempt slots.
 
 Public summary tables and plot-data files use the display labels `cSwitch`,
 `ARCAS`, `EEVDF`, and `Caladan+`. Internal variant keys such as

@@ -7,14 +7,14 @@ command below from the repository root.
 
 The `main` branch contains scheduler source only. The `artifact-evaluation`
 branch adds the evaluation harness, frozen motivation inputs, and plotting
-code. The frozen AEC release is `sosp26-ae-v2`; `./reproduce.sh check` verifies
+code. The frozen AEC release is `sosp26-ae-v3`; `./reproduce.sh check` verifies
 that the checkout matches this tag and the pinned scheduler source.
 
 For a public checkout, clone the release directly into a directory named
 `ae`. Do not switch to a mutable branch afterward:
 
 ```sh
-git clone --branch sosp26-ae-v2 --depth 1 \
+git clone --branch sosp26-ae-v3 --depth 1 \
   https://github.com/netlab-wisconsin/cSwitch.git ae
 cd ae
 ```
@@ -46,7 +46,9 @@ host and must not run concurrently with another performance experiment:
 ```
 
 `AE_MAX_ATTEMPTS=3` preserves up to three attempt slots for a failed point
-while requiring one successful round. See
+while requiring one successful round. Non-finite, zero, and negative primary
+metrics are failures and consume an attempt slot instead of satisfying the
+success target. See
 [`docs/EXPECTED_RESULTS.md`](docs/EXPECTED_RESULTS.md) for per-figure runtime,
 storage, outputs, and qualitative success criteria.
 
@@ -80,13 +82,15 @@ panels. Omitting the action on a primary target defaults to `full`; specify
 | `./reproduce.sh <figure> smoke` | Run the figure's short functional subset without plotting |
 | `./reproduce.sh <figure> plot` | Rebuild a graph from existing result files |
 
-The primary figures are written to:
+Every top-level `full` or `smoke` command creates an independent timestamped
+campaign unless `AE_OUT_ROOT` is explicitly set. The primary figures from the
+most recently started campaign are available through:
 
 ```text
-ae/results/figures/figure10.pdf
-ae/results/figures/figure11.pdf
-ae/results/figures/figure12.pdf
-ae/results/figures/figure13.pdf
+ae/results/latest/figures/figure10.pdf
+ae/results/latest/figures/figure11.pdf
+ae/results/latest/figures/figure12.pdf
+ae/results/latest/figures/figure13.pdf
 ```
 
 PNG versions and normalized plot data are stored in the same directory.
@@ -233,27 +237,34 @@ instructions are documented in
 
 ## Results And Resume
 
-Fresh primary outputs are written only under `ae/results/` and are ignored by
-Git; frozen characterization inputs remain under `motivation/reference/`.
-Successful points are skipped when the same command is rerun, while failed
-attempt directories and logs are retained and the next attempt slot is used.
-For an entirely independent campaign, select a new output root:
+Fresh primary outputs are written below `ae/results/campaigns/` and are ignored
+by Git; `ae/results/latest` points to the most recently started campaign.
+Frozen characterization inputs remain under `motivation/reference/`. This
+default keeps runs from different evaluators independent even when they use a
+shared checkout. Each command prints its exact campaign root and resume
+command.
+
+To resume a particular interrupted campaign, explicitly reuse its output root:
 
 ```sh
-AE_OUT_ROOT="$HOME/ae-results/fresh-$(date -u +%Y%m%dT%H%M%SZ)" \
+AE_OUT_ROOT="$PWD/ae/results/campaigns/<campaign-id>" \
   ./reproduce.sh primary
 ```
 
+Within an explicitly selected campaign, successful points are skipped, failed
+attempt directories and logs are retained, and the next attempt slot is used.
 Pressing `Ctrl-C` terminates the active scheduler/workload process group and
-releases the machine lock. Rerun the same command to resume completed points.
+releases the machine lock. Use the printed command to resume completed points.
 Use `--force` only through the internal harness when deliberately replacing
 saved attempts; details are in
 [`docs/AE_REFERENCE.md`](docs/AE_REFERENCE.md).
 
 ## Machine Access And Concurrency
 
-Each evaluator should use a separate checkout, normally `~/ae`. The wrapper
-uses `umask 002`; it never makes the checkout world-writable. Experiment runs
+Each evaluator may use a separate checkout, normally `~/ae`. On the supplied
+AEC host, evaluators may also share the prepared checkout because every fresh
+top-level run receives an independent campaign directory. The wrapper uses
+`umask 002`; it never makes the checkout world-writable. Experiment runs
 acquire `/run/lock/cswitch-ae.lock` with `flock` and fail clearly when another
 campaign owns the machine. Set `AE_LOCK_WAIT_SECONDS` to a bounded number of
 seconds to wait instead.

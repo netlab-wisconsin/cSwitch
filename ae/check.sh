@@ -146,6 +146,12 @@ else
   fail "ae/harness.py --help failed"
 fi
 
+if python3 -m unittest discover -s "$AE_DIR/tests" -p 'test_*.py'; then
+  ok "AE harness unit tests"
+else
+  fail "AE harness unit tests failed"
+fi
+
 if AE_SCHEDULER_ROOT="$SCHEDULER_ROOT" python3 "$AE_DIR/harness.py" check; then
   ok "ae/harness.py check"
 else

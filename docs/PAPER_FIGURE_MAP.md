@@ -24,7 +24,7 @@ experiments.
   the I/O chiplet is unloaded and loaded.
 - AE entry point: `ae/run.sh fig10 full`.
 - Underlying runner: `ae/harness.py`.
-- Default AE output: `ae/results/fig10/`.
+- Campaign-relative AE output: `<campaign>/fig10/`.
 - Summary files: `results/raw_results.tsv`,
   `results/aggregate_results.tsv`, `results/results_matrix.csv`, and
   `results/summary.md`.
@@ -51,7 +51,7 @@ experiments.
   and File Server under heterogeneous free/busy cores.
 - AE entry point: `ae/run.sh fig11 full`.
 - Underlying runner: `ae/harness.py`.
-- Default AE output: `ae/results/fig11/`.
+- Campaign-relative AE output: `<campaign>/fig11/`.
 - Summary files: `results/raw_results.tsv`, `results/aggregate_results.tsv`,
   `results/summary.md`.
 - Workload coverage: `llamacpp_llama31_8b`, `gapbs_pr_kron20`, and
@@ -72,7 +72,7 @@ experiments.
   traffic load.
 - AE entry point: `ae/run.sh fig12a full`.
 - Underlying runner: `ae/harness.py`.
-- Default AE output: `ae/results/fig12a/`.
+- Campaign-relative AE output: `<campaign>/fig12a/`.
 - Summary files: `results/raw_results.tsv`, `results/aggregate_results.tsv`,
   `results/summary.md`.
 - Variant coverage: `paper-greedy`, `arcas`, `eevdf`, `nsdi-delay-range`.
@@ -93,7 +93,7 @@ experiments.
   traffic load.
 - AE entry point: `ae/run.sh fig12b full`.
 - Underlying runner: `ae/harness.py`.
-- Default AE output: `ae/results/fig12b/`.
+- Campaign-relative AE output: `<campaign>/fig12b/`.
 - Summary files: `results/raw_results.tsv`, `results/aggregate_results.tsv`,
   `results/summary.md`.
 - Variant coverage: `paper-greedy`, `arcas`, `eevdf`, `nsdi-delay-range`.
@@ -120,7 +120,7 @@ experiments.
   without chiplet load, normalized to the single-thread case.
 - AE entry point: `ae/run.sh fig13 full`.
 - Underlying runner: `ae/harness.py`.
-- Default AE output: `ae/results/fig13/`.
+- Campaign-relative AE output: `<campaign>/fig13/`.
 - Summary files: `results/raw_results.tsv`, `results/aggregate_results.tsv`,
   `results/summary.md`.
 - Variant coverage: `paper-greedy`, `arcas`, `eevdf`, `nsdi-delay-range`.
