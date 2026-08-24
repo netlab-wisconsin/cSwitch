@@ -124,7 +124,8 @@ experiments.
 - Summary files: `results/raw_results.tsv`, `results/aggregate_results.tsv`,
   `results/summary.md`.
 - Variant coverage: `paper-greedy`, `arcas`, `eevdf`, `nsdi-delay-range`.
-- Workload: `gapbs_pr_kron20` over `0-13,21-34,42-55,63-76`.
+- Workload key: `gapbs_pr_kron20`; Figure 13 executes one PageRank trial over
+  `$AE_GAPBS_GRAPH_ROOT/twitter.sg` on `0-13,21-34,42-55,63-76`.
 - Thread counts: `1`, `2`, `4`, `6`, `8`, `10`, `12`, `14`, `16`, `18`.
 - Cases: `clean` and `loaded`; loaded sidecar traffic runs on
   `0-3,7-10,21-24,28-31,42,49,63,70`.

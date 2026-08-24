@@ -79,6 +79,7 @@ FIG12B_MANAGED_NOISE_CPUS = ("0-4", "7-11", "21-25", "28-32")
 FIG12B_EXTERNAL_NOISE_CPUS = "14-15,35-36,56-57,77-78"
 FIG12B_EXTERNAL_NOISE_RATE = 50
 FIG13_WORKLOAD_CPUS = "0-13,21-34,42-55,63-76"
+DEFAULT_FIG13_TWITTER_GRAPH = GAPBS_GRAPH_ROOT / "twitter.sg"
 SUCCESS_STATUSES = {"ok", "salvaged"}
 TRIAL_TIME_RE = re.compile(r"Trial Time:\s*([0-9]+(?:\.[0-9]+)?)")
 AVERAGE_TIME_RE = re.compile(r"Average Time:\s*([0-9]+(?:\.[0-9]+)?)")
@@ -1166,7 +1167,20 @@ def direct_gapbs_pr_args(spec: RunSpec, args: argparse.Namespace) -> list[str]:
         return ["-g", "20", "-i", "100", "-n", "1"]
     if spec.figure in {"fig12a", "fig12b"}:
         return ["-g", "20"]
+    if spec.figure == "fig13":
+        return [
+            "-f",
+            str(args.fig13_twitter_graph),
+            "-n",
+            str(args.fig13_trials),
+        ]
     return ["-g", "20", "-n", str(args.gapbs_iterations)]
+
+
+def benchmark_label(spec: RunSpec) -> str:
+    if spec.figure == "fig13" and spec.benchmark == "gapbs_pr_kron20":
+        return "GAPBS PR Twitter"
+    return WORKLOADS[spec.benchmark].label
 
 
 def workload_command(spec: RunSpec, args: argparse.Namespace, run_dir: Path) -> list[str]:
@@ -1856,7 +1870,7 @@ def execute_spec(spec: RunSpec, args: argparse.Namespace, binary_paths: dict[str
     config_payload: MappingLike = {
         "figure": spec.figure,
         "benchmark": spec.benchmark,
-        "benchmark_label": WORKLOADS[spec.benchmark].label,
+        "benchmark_label": benchmark_label(spec),
         "case": spec.case,
         "variant": spec.variant,
         "threads": spec.threads,
@@ -1886,6 +1900,14 @@ def execute_spec(spec: RunSpec, args: argparse.Namespace, binary_paths: dict[str
         "cs_villain_release_samples": args.cs_villain_release_samples,
         "generated_at": now_utc_iso(),
     }
+    if spec.figure == "fig13":
+        config_payload.update(
+            {
+                "graph_kind": "twitter",
+                "graph_path": str(args.fig13_twitter_graph),
+                "gapbs_trials": args.fig13_trials,
+            }
+        )
     write_json(run_dir / "config.json", config_payload)
 
     if args.mode == "dry-run":
@@ -1992,6 +2014,9 @@ def summarize_figure(figure: str, args: argparse.Namespace) -> None:
         "noise_rate",
         "noise_rates",
         "paper_condition",
+        "graph_kind",
+        "graph_path",
+        "gapbs_trials",
         "repeat",
         "attempt",
         "target_successes",
@@ -2059,7 +2084,10 @@ def summarize_figure(figure: str, args: argparse.Namespace) -> None:
             {
                 "figure": figure,
                 "benchmark": bench,
-                "benchmark_label": WORKLOADS[bench].label if bench in WORKLOADS else bench,
+                "benchmark_label": str(
+                    items[0].get("benchmark_label")
+                    or (WORKLOADS[bench].label if bench in WORKLOADS else bench)
+                ),
                 "case": case,
                 "variant": result_variant_label(variant),
                 "threads": threads,
@@ -2164,7 +2192,7 @@ def check(args: argparse.Namespace) -> int:
         ),
         ("gapbs_pr", bool(WORKLOADS["gapbs_pr_kron20"].binary and WORKLOADS["gapbs_pr_kron20"].binary.exists())),
         ("gapbs_bc", bool(WORKLOADS["gapbs_bc_kron20_twitter"].binary and WORKLOADS["gapbs_bc_kron20_twitter"].binary.exists())),
-        ("gapbs_twitter_graph", (GAPBS_GRAPH_ROOT / "twitter.sg").exists()),
+        ("gapbs_twitter_graph", args.fig13_twitter_graph.exists()),
         ("node_replication_manifest", (NODE_REPLICATION_ROOT / "Cargo.toml").exists()),
         ("llama_model", Path(WORKLOADS["llamacpp_llama31_8b"].backend_options["model"]).exists()),
         ("filebench_webserver_template", (AE_ROOT / "templates" / "filebench_webserver_10s.f").exists()),
@@ -2222,6 +2250,18 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--fig12-scope-widen-delay-sec", type=float, default=float(os.environ.get("AE_FIG12_SCOPE_WIDEN_DELAY_SEC", "0")))
     parser.add_argument("--managed-cpu-max", type=int, default=int(os.environ.get("AE_MANAGED_CPU_MAX", "83")))
     parser.add_argument("--gapbs-iterations", type=int, default=int(os.environ.get("AE_GAPBS_ITERATIONS", "16")))
+    parser.add_argument(
+        "--fig13-twitter-graph",
+        type=Path,
+        default=Path(os.environ.get("AE_FIG13_TWITTER_GRAPH", DEFAULT_FIG13_TWITTER_GRAPH)),
+        help="Serialized Twitter graph used by Figure 13 PageRank.",
+    )
+    parser.add_argument(
+        "--fig13-trials",
+        type=int,
+        default=int(os.environ.get("AE_FIG13_TRIALS", "1")),
+        help="GAPBS PageRank trials per Figure 13 point (default: 1).",
+    )
     parser.add_argument("--cs-villain-throttle", choices=("true", "false"), default=os.environ.get("AE_CS_VILLAIN_THROTTLE", "true"))
     parser.add_argument("--tick-reeval-every", type=int, default=int(os.environ.get("AE_TICK_REEVAL_EVERY", "1")))
     parser.add_argument("--tick-defer-max", type=int, default=int(os.environ.get("AE_TICK_DEFER_MAX", "1")))
@@ -2260,10 +2300,13 @@ def main() -> int:
     args = parse_args()
     args.out_root = args.out_root.expanduser().resolve()
     args.ccm_mapping_path = args.ccm_mapping_path.expanduser().resolve()
+    args.fig13_twitter_graph = args.fig13_twitter_graph.expanduser().resolve()
     if args.repeats <= 0:
         raise SystemExit("--repeats must be positive")
     if args.max_attempts < args.repeats:
         raise SystemExit("--max-attempts must be >= --repeats")
+    if args.fig13_trials <= 0:
+        raise SystemExit("--fig13-trials must be positive")
     if args.fig10_noise_rate < 0:
         raise SystemExit("--fig10-noise-rate must be non-negative")
     if args.fig10_noise_duration_sec <= 0:

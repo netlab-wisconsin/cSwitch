@@ -18,7 +18,7 @@ can change wall time substantially.
 | `fig12a` | 28 | 0.5-1 hour | 5 GB | Sensitivity to compute-I/O link load |
 | `fig12b` | 28 | 0.5-1 hour | 5 GB | Sensitivity to overall I/O-chiplet load |
 | `fig12` | 56 | 1-2 hours | 5 GB | Both Figure 12 load sweeps |
-| `fig13` | 80 | 1-2 hours | 5 GB | PageRank scaling across thread counts |
+| `fig13` | 80 | 1-2 hours | 5 GB | Twitter PageRank scaling across thread counts |
 | `primary` | 256 | 5-9 hours | 20 GB | Figures 10-13, summaries, plot data, PDFs, and PNGs |
 | `optional` | 0 fresh points | under 2 minutes | under 100 MB | Frozen Figures 2-6 and 8 pass checksums and render |
 

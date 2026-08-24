@@ -1,7 +1,7 @@
 # cSwitch SOSP 2026 Artifact Evaluation
 
 The top-level `README.md` and `reproduce.sh` are the evaluator entry point for
-cSwitch. The frozen `sosp26-ae-v5` release keeps the artifact implementation
+cSwitch. The frozen `sosp26-ae-v6` release keeps the artifact implementation
 separate from the scheduler source directories and uses the standalone
 `ae/harness.py`; historical `eval/exp*` runners are not invoked.
 
@@ -255,10 +255,14 @@ The metric for one round is the arithmetic mean of the four PageRank instance
 times. When `AE_REPEATS` is greater than one, summaries then take the median
 of those per-round means.
 
-Figure 13 defaults to PageRank over `0-13,21-34,42-55,63-76`, variants
+Figure 13 defaults to one PageRank trial over the serialized Twitter graph,
+using `0-13,21-34,42-55,63-76`, variants
 `paper-greedy`, `arcas`, `eevdf`, and `nsdi-delay-range`, cases `clean` and
 `loaded`, and thread counts `1,2,4,6,8,10,12,14,16,18`. The loaded case uses
 asymmetric sidecar traffic on `0-3,7-10,21-24,28-31,42,49,63,70`.
+The graph defaults to `$AE_GAPBS_GRAPH_ROOT/twitter.sg`; override it with
+`AE_FIG13_TWITTER_GRAPH`. `AE_FIG13_TRIALS` defaults to `1` because one Twitter
+trial is already long enough for a stable scaling measurement.
 
 ## Common Environment Variables
 
@@ -331,6 +335,9 @@ asymmetric sidecar traffic on `0-3,7-10,21-24,28-31,42,49,63,70`.
   both select `paper-greedy`; use the explicit `la-default` key only for
   legacy-policy diagnostics.
 - `AE_CORES`: Figure 13 core list.
+- `AE_FIG13_TWITTER_GRAPH`: serialized Twitter graph used by Figure 13,
+  default `$AE_GAPBS_GRAPH_ROOT/twitter.sg`.
+- `AE_FIG13_TRIALS`: PageRank trials per Figure 13 point, default `1`.
 - `AE_NOISE_RATES`: Figure 12 noise-rate list; `0` is the AE no-noise
   sentinel, while positive values are `memory_benchmark` NOP rate-limiters.
 - `AE_PAPER_NOISE_DURATION_SEC`: long-running paper sidecar duration, default

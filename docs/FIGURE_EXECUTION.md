@@ -156,6 +156,10 @@ claim independent reproduction of their original systems.
 | 12b | `fig12b` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig12b` | `<campaign>/fig12b/` |
 | 13 | `fig13` | `AE_REPEATS=1 AE_MAX_ATTEMPTS=3 ./reproduce.sh fig13` | `<campaign>/fig13/` |
 
+Figure 13 runs one PageRank trial per point over
+`$AE_GAPBS_GRAPH_ROOT/twitter.sg`. Use `AE_FIG13_TWITTER_GRAPH` to select an
+equivalent serialized Twitter graph at another location.
+
 Use the same target for command inspection or a short functional run:
 
 ```sh

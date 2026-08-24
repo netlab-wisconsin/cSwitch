@@ -6,7 +6,7 @@ into concrete artifact-package tasks.
 ## Available
 
 - Public repository: <https://github.com/netlab-wisconsin/cSwitch>, with the
-  evaluator tree pinned by tag `sosp26-ae-v5`. Archive the tagged release on a
+  evaluator tree pinned by tag `sosp26-ae-v6`. Archive the tagged release on a
   long-term service such as Zenodo when the final public version is ready.
 - License: the scheduler and author material use GPL-2.0-only. Third-party
   provenance and licensing boundaries are recorded in `LICENSES.md`,
@@ -73,8 +73,8 @@ into concrete artifact-package tasks.
   - Figure 12a and 12b use distinct paper launch shapes for compute-I/O link
     load and overall I/O-chiplet load, including a true no-noise baseline that
     launches no `memory_benchmark` process.
-  - Figure 13 defaults to the paper PageRank thread-count sweep with clean and
-    loaded cases.
+  - Figure 13 defaults to one Twitter PageRank trial per thread-count point
+    with clean and loaded cases.
   - CS-link villain throttling is explicitly enabled for local cSwitch
     variants with `--cs-villain-throttle true`.
   - default Figure 10-13 wall-time, storage, outputs, and expected qualitative

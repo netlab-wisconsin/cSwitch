@@ -53,6 +53,9 @@ Common env:
   AE_VARIANTS         Space/comma separated variants
   AE_BENCHMARKS       Space/comma separated AE workloads
   AE_CORES            Figure 13 core list
+  AE_FIG13_TWITTER_GRAPH
+                      Figure 13 twitter.sg path, default below AE_GAPBS_GRAPH_ROOT
+  AE_FIG13_TRIALS     GAPBS trials per Figure 13 point, default 1
   AE_NOISE_RATES      Figure 12 noise-rate list
   AE_FIG10_NOISE_RATE Fig10 loaded sidecar rate, default 50
 USAGE

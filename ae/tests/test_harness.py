@@ -239,5 +239,39 @@ class Fig10AffinityTests(unittest.TestCase):
             )
 
 
+class Fig13InputTests(unittest.TestCase):
+    def test_figure13_uses_one_twitter_trial(self) -> None:
+        graph = Path("/graphs/twitter.sg")
+        args = SimpleNamespace(
+            fig13_twitter_graph=graph,
+            fig13_trials=1,
+            gapbs_iterations=16,
+        )
+        spec = HARNESS.RunSpec(
+            "fig13", "gapbs_pr_kron20", "clean", "paper-greedy", 18, 1
+        )
+
+        self.assertEqual(
+            HARNESS.direct_gapbs_pr_args(spec, args),
+            ["-f", str(graph), "-n", "1"],
+        )
+        self.assertEqual(HARNESS.benchmark_label(spec), "GAPBS PR Twitter")
+
+    def test_figure11_keeps_the_kronecker_input(self) -> None:
+        args = SimpleNamespace(
+            fig13_twitter_graph=Path("/graphs/twitter.sg"),
+            fig13_trials=1,
+            gapbs_iterations=16,
+        )
+        spec = HARNESS.RunSpec(
+            "fig11", "gapbs_pr_kron20", "free-cores", "paper-greedy", 3, 1
+        )
+
+        self.assertEqual(
+            HARNESS.direct_gapbs_pr_args(spec, args),
+            ["-g", "20", "-i", "100", "-n", "1"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

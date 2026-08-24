@@ -50,12 +50,14 @@ make -C "$HOME/gapbs/gapbs" -j"$(nproc)" pr bc converter
 make -C "$HOME/gapbs/gapbs" bench-graphs
 ```
 
-The Figure 10 BC point uses `benchmark/graphs/twitter.sg`; PageRank also uses
-a generated Kronecker scale-20 graph. The Twitter graph recipe in the pinned
+The Figure 13 PageRank sweep uses `benchmark/graphs/twitter.sg`. Figure 10's
+GAPBS points and the Figure 11-12 PageRank points retain their generated
+Kronecker scale-20 inputs. The Twitter graph recipe in the pinned
 GAPBS `benchmark/bench.mk` downloads the compressed source from the ANLAB-KAIST
 trace release and converts it. The generated graph occupies roughly 12 GB on
 the supplied host. Override the checkout and graph directory with
-`AE_GAPBS_ROOT` and `AE_GAPBS_GRAPH_ROOT`.
+`AE_GAPBS_ROOT` and `AE_GAPBS_GRAPH_ROOT`; override only the Figure 13 input
+with `AE_FIG13_TWITTER_GRAPH` when needed.
 
 ### YCSB Workspace
 

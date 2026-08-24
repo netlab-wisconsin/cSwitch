@@ -5,7 +5,7 @@ The default `main` branch contains only scheduler source. The
 `ae/` and `motivation/` without relocating the scheduler source.
 
 The evaluator release is the immutable tag named in `ae/ARTIFACT_RELEASE`
-(`sosp26-ae-v5`). `./reproduce.sh check` resolves that tag and requires the
+(`sosp26-ae-v6`). `./reproduce.sh check` resolves that tag and requires the
 current `HEAD` to match its commit before a fresh campaign starts. This release
 check is separate from the scheduler-source check below.
 
